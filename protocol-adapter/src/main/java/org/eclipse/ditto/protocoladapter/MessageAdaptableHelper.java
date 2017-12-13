@@ -47,6 +47,10 @@ final class MessageAdaptableHelper {
     private static final String APPLICATION_JSON = "application/json";
     private static final String APPLICATION_OCTET_STREAM = "application/octet-stream";
 
+    private MessageAdaptableHelper() {
+        throw new AssertionError();
+    }
+
     /**
      * Creates an {@link Adaptable} from the passed {@link Message} and its related arguments.
      *
@@ -65,7 +69,7 @@ final class MessageAdaptableHelper {
             final Message<?> message,
             final DittoHeaders dittoHeaders) {
 
-        final TopicPathBuilder topicPathBuilder = DittoProtocolAdapter.newTopicPathBuilder(thingId);
+        final TopicPathBuilder topicPathBuilder = ProtocolFactory.newTopicPathBuilder(thingId);
 
         final MessagesTopicPathBuilder messagesTopicPathBuilder;
         if (channel == TopicPath.Channel.LIVE) {
