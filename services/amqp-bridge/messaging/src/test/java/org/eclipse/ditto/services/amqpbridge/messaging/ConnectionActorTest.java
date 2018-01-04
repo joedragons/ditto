@@ -99,6 +99,7 @@ public class ConnectionActorTest {
             final String connectionId = createRandomConnectionId();
             final AmqpConnection amqpConnection = createConnection(connectionId);
             final ActorRef underTest = createAmqpConnectionActor(connectionId);
+            watch(underTest);
 
             // create connection
             final CreateConnection createConnection = CreateConnection.of(amqpConnection, DittoHeaders.empty());
@@ -115,7 +116,6 @@ public class ConnectionActorTest {
             expectMsg(closeConnectionResponse);
 
             // delete connection
-            watch(underTest);
             final DeleteConnection deleteConnection = DeleteConnection.of(connectionId, DittoHeaders.empty());
             underTest.tell(deleteConnection, getRef());
             final DeleteConnectionResponse deleteConnectionResponse =
@@ -131,6 +131,7 @@ public class ConnectionActorTest {
             final String connectionId = createRandomConnectionId();
             final AmqpConnection amqpConnection = createConnection(connectionId);
             ActorRef underTest = createAmqpConnectionActor(connectionId);
+            watch(underTest);
 
             // create connection
             final CreateConnection createConnection = CreateConnection.of(amqpConnection, DittoHeaders.empty());
@@ -140,7 +141,6 @@ public class ConnectionActorTest {
             expectMsg(createConnectionResponse);
 
             // stop actor
-            watch(underTest);
             getSystem().stop(underTest);
             expectTerminated(underTest);
 
@@ -163,6 +163,7 @@ public class ConnectionActorTest {
             final String connectionId = createRandomConnectionId();
             final AmqpConnection amqpConnection = createConnection(connectionId);
             ActorRef underTest = createAmqpConnectionActor(connectionId);
+            watch(underTest);
 
             // create connection
             final CreateConnection createConnection = CreateConnection.of(amqpConnection, DittoHeaders.empty());
@@ -179,7 +180,6 @@ public class ConnectionActorTest {
             expectMsg(closeConnectionResponse);
 
             // stop actor
-            watch(underTest);
             getSystem().stop(underTest);
             expectTerminated(underTest);
 
@@ -202,6 +202,7 @@ public class ConnectionActorTest {
             final String connectionId = createRandomConnectionId();
             final AmqpConnection amqpConnection = createConnection(connectionId);
             ActorRef underTest = createAmqpConnectionActor(connectionId);
+            watch(underTest);
 
             // create connection
             final CreateConnection createConnection = CreateConnection.of(amqpConnection, DittoHeaders.empty());
@@ -211,7 +212,6 @@ public class ConnectionActorTest {
             expectMsg(createConnectionResponse);
 
             // delete connection
-            watch(underTest);
             final DeleteConnection deleteConnection = DeleteConnection.of(connectionId, DittoHeaders.empty());
             underTest.tell(deleteConnection, getRef());
             final DeleteConnectionResponse deleteConnectionResponse =
