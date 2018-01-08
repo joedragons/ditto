@@ -42,7 +42,7 @@ import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import akka.actor.Props;
 import akka.cluster.pubsub.DistributedPubSub;
-import akka.testkit.JavaTestKit;
+import akka.testkit.javadsl.TestKit;
 
 /**
  * Base test class for testing persistence actors of the things persistence.
@@ -126,7 +126,7 @@ public abstract class PersistenceActorTestBase {
     /** */
     @After
     public void tearDownBase() {
-        JavaTestKit.shutdownActorSystem(actorSystem);
+        TestKit.shutdownActorSystem(actorSystem);
         actorSystem = null;
     }
 
@@ -136,7 +136,7 @@ public abstract class PersistenceActorTestBase {
     }
 
     protected ActorRef createSupervisorActorFor(final String thingId) {
-        final java.time.Duration minBackoff = java.time.Duration.ofSeconds(3);
+        final java.time.Duration minBackoff = java.time.Duration.ofSeconds(7);
         final java.time.Duration maxBackoff = java.time.Duration.ofSeconds(60);
         final double randomFactor = 0.2;
 
