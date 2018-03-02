@@ -14,6 +14,7 @@ package org.eclipse.ditto.model.amqpbridge;
 import java.net.URI;
 import java.text.MessageFormat;
 
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
 
@@ -37,13 +38,13 @@ public final class ConnectionUriInvalidException extends DittoRuntimeException i
     private static final String MESSAGE_TEMPLATE = "The Connection URI ''{0}'' has an invalid format.";
 
     private static final String DEFAULT_DESCRIPTION =
-            "The accepted format is amqp(s)://{username}:{password}@{hostname}:{port}";
+            "The accepted format is amqp(s)://{username}:{password}@{hostname}:{port}/{path}";
 
     private static final long serialVersionUID = -3899791430534146626L;
 
-    private ConnectionUriInvalidException(final DittoHeaders dittoHeaders, final String message,
-            final String description,
-            final Throwable cause, final URI href) {
+    private ConnectionUriInvalidException(final DittoHeaders dittoHeaders, @Nullable final String message,
+            @Nullable final String description,
+            @Nullable final Throwable cause, @Nullable final URI href) {
         super(ERROR_CODE, HttpStatusCode.BAD_REQUEST, dittoHeaders, message, description, cause, href);
     }
 
@@ -101,8 +102,8 @@ public final class ConnectionUriInvalidException extends DittoRuntimeException i
         }
 
         @Override
-        protected ConnectionUriInvalidException doBuild(final DittoHeaders dittoHeaders, final String message,
-                final String description, final Throwable cause, final URI href) {
+        protected ConnectionUriInvalidException doBuild(final DittoHeaders dittoHeaders, @Nullable final String message,
+                @Nullable final String description, @Nullable final Throwable cause, @Nullable final URI href) {
             return new ConnectionUriInvalidException(dittoHeaders, message, description, cause, href);
         }
     }

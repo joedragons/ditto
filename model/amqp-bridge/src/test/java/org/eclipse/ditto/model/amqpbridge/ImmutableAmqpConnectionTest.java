@@ -34,11 +34,13 @@ import nl.jqno.equalsverifier.EqualsVerifier;
 /**
  * Unit test for {@link ImmutableAmqpConnection}.
  */
-public final class ImmutableConnectionTest {
+public final class ImmutableAmqpConnectionTest {
 
     private static final Pattern URI_PATTERN = Pattern.compile(AmqpConnection.UriRegex.REGEX);
 
-    private static final String ID = "myConnection";
+    private static final ConnectionType TYPE = ConnectionType.AMQP_10;
+
+    private static final String ID = TYPE + ":myConnection";
 
     private static final String URI = "amqps://foo:bar@example.com:443";
 
@@ -46,8 +48,7 @@ public final class ImmutableConnectionTest {
             AuthorizationSubject.newInstance("mySolutionId:mySubject");
 
     private static final Set<String> SOURCES = new HashSet<>(Arrays.asList("amqp/source1", "amqp/source2"));
-
-    private static final boolean FAILOVER_ENABLED = true;
+    private static final String TARGET = "eventQueue";
 
     private static final JsonObject KNOWN_JSON = JsonObject.newBuilder()
             .set(AmqpConnection.JsonFields.ID, ID)
@@ -56,7 +57,12 @@ public final class ImmutableConnectionTest {
             .set(AmqpConnection.JsonFields.SOURCES, SOURCES.stream()
                     .map(JsonFactory::newValue)
                     .collect(JsonCollectors.valuesToArray()))
-            .set(AmqpConnection.JsonFields.FAILOVER_ENABLED, FAILOVER_ENABLED)
+            .set(AmqpConnection.JsonFields.EVENT_TARGET, TARGET)
+            .set(AmqpConnection.JsonFields.FAILOVER_ENABLED, true)
+            .set(AmqpConnection.JsonFields.VALIDATE_CERTIFICATES, true)
+            .set(AmqpConnection.JsonFields.THROTTLE, -1)
+            .set(AmqpConnection.JsonFields.CONSUMER_COUNT, 1)
+            .set(AmqpConnection.JsonFields.PROCESSOR_POOL_SIZE, 5)
             .build();
 
     @Test
@@ -75,7 +81,7 @@ public final class ImmutableConnectionTest {
     @Test
     public void createInstanceWithNullId() {
         assertThatExceptionOfType(NullPointerException.class)
-                .isThrownBy(() -> ImmutableAmqpConnection.of(null, URI, AUTHORIZATION_SUBJECT, SOURCES, FAILOVER_ENABLED))
+                .isThrownBy(() -> ImmutableAmqpConnection.of(null, TYPE, URI, AUTHORIZATION_SUBJECT))
                 .withMessage("The %s must not be null!", "ID")
                 .withNoCause();
     }
@@ -83,7 +89,7 @@ public final class ImmutableConnectionTest {
     @Test
     public void createInstanceWithNullUri() {
         assertThatExceptionOfType(NullPointerException.class)
-                .isThrownBy(() -> ImmutableAmqpConnection.of(ID, null, AUTHORIZATION_SUBJECT, SOURCES, FAILOVER_ENABLED))
+                .isThrownBy(() -> ImmutableAmqpConnection.of(ID, TYPE, null, AUTHORIZATION_SUBJECT))
                 .withMessage("The %s must not be null!", "URI")
                 .withNoCause();
     }
@@ -91,7 +97,7 @@ public final class ImmutableConnectionTest {
     @Test
     public void createInstanceWithNullAuthorizationSubject() {
         assertThatExceptionOfType(NullPointerException.class)
-                .isThrownBy(() -> ImmutableAmqpConnection.of(ID, URI, null, SOURCES, FAILOVER_ENABLED))
+                .isThrownBy(() -> ImmutableAmqpConnection.of(ID, TYPE, URI, null))
                 .withMessage("The %s must not be null!", "Authorization Subject")
                 .withNoCause();
     }
@@ -99,17 +105,40 @@ public final class ImmutableConnectionTest {
     @Test
     public void createInstanceWithNullSources() {
         assertThatExceptionOfType(NullPointerException.class)
-                .isThrownBy(() -> ImmutableAmqpConnection.of(ID, URI, AUTHORIZATION_SUBJECT, null, FAILOVER_ENABLED))
+                .isThrownBy(
+                        () -> ImmutableAmqpConnectionBuilder.of(ID, TYPE, URI, AUTHORIZATION_SUBJECT)
+                                .sources((Set) null))
                 .withMessage("The %s must not be null!", "Sources")
                 .withNoCause();
     }
 
     @Test
-    public void fromJsonReturnsExpected() {
-        final ImmutableAmqpConnection expected = ImmutableAmqpConnection.of(ID, URI, AUTHORIZATION_SUBJECT, SOURCES,
-                FAILOVER_ENABLED);
+    public void createInstanceWithNullEventTarget() {
+        assertThatExceptionOfType(NullPointerException.class)
+                .isThrownBy(
+                        () -> ImmutableAmqpConnectionBuilder.of(ID, TYPE, URI, AUTHORIZATION_SUBJECT).eventTarget(null))
+                .withMessage("The %s must not be null!", "eventTarget")
+                .withNoCause();
+    }
 
-        final ImmutableAmqpConnection actual = ImmutableAmqpConnection.fromJson(KNOWN_JSON);
+    @Test
+    public void createInstanceWithNullReplyTarget() {
+        assertThatExceptionOfType(NullPointerException.class)
+                .isThrownBy(
+                        () -> ImmutableAmqpConnectionBuilder.of(ID, TYPE, URI, AUTHORIZATION_SUBJECT).replyTarget(null))
+                .withMessage("The %s must not be null!", "replyTarget")
+                .withNoCause();
+    }
+
+    @Test
+    public void fromJsonReturnsExpected() {
+        final AmqpConnection expected =
+                AmqpBridgeModelFactory.newConnectionBuilder(ID, TYPE, URI, AUTHORIZATION_SUBJECT)
+                        .sources(SOURCES)
+                        .eventTarget(TARGET)
+                        .build();
+
+        final AmqpConnection actual = ImmutableAmqpConnection.fromJson(KNOWN_JSON);
 
         assertThat(actual).isEqualTo(expected);
     }
@@ -117,18 +146,37 @@ public final class ImmutableConnectionTest {
     @Test
     public void toJsonReturnsExpected() {
         final JsonObject actual =
-                ImmutableAmqpConnection.of(ID, URI, AUTHORIZATION_SUBJECT, SOURCES, FAILOVER_ENABLED).toJson();
+                AmqpBridgeModelFactory.newConnectionBuilder(ID, TYPE, URI, AUTHORIZATION_SUBJECT)
+                        .sources(SOURCES)
+                        .eventTarget(TARGET)
+                        .build()
+                        .toJson();
 
         assertThat(actual).isEqualTo(KNOWN_JSON);
     }
 
     @Test
     public void uriRegexMatchesExpected() {
-        final Matcher matcher = URI_PATTERN.matcher("amqps://foo:bar@hono.eclipse.org:5671");
+        final Matcher matcher = URI_PATTERN.matcher("amqps://foo:bar@hono.eclipse.org:5671/vhost");
 
         final boolean matches = matcher.matches();
 
         assertThat(matches).isTrue();
+        assertThat(matcher.group(AmqpConnection.UriRegex.PROTOCOL_REGEX_GROUP)).isEqualTo("amqps");
+        assertThat(matcher.group(AmqpConnection.UriRegex.USERNAME_REGEX_GROUP)).isEqualTo("foo");
+        assertThat(matcher.group(AmqpConnection.UriRegex.PASSWORD_REGEX_GROUP)).isEqualTo("bar");
+        assertThat(matcher.group(AmqpConnection.UriRegex.HOSTNAME_REGEX_GROUP)).isEqualTo("hono.eclipse.org");
+        assertThat(matcher.group(AmqpConnection.UriRegex.PORT_REGEX_GROUP)).isEqualTo("5671");
+        assertThat(matcher.group(AmqpConnection.UriRegex.PATH_REGEX_GROUP)).isEqualTo("vhost");
+    }
+
+    @Test
+    public void uriRegexMatchesWithoutVHost() {
+        final Matcher matcher = URI_PATTERN.matcher("amqps://foo:bar@hono.eclipse.org:5671");
+
+        final boolean matches = matcher.matches();
+        assertThat(matches).isTrue();
+        assertThat(matcher.group(AmqpConnection.UriRegex.PATH_REGEX_GROUP)).isNull();
     }
 
     @Test

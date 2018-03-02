@@ -11,6 +11,7 @@
  */
 package org.eclipse.ditto.model.amqpbridge;
 
+import java.util.Optional;
 import java.util.Set;
 
 import javax.annotation.concurrent.Immutable;
@@ -40,6 +41,13 @@ public interface AmqpConnection extends Jsonifiable.WithFieldSelectorAndPredicat
     String getId();
 
     /**
+     * Returns the connection type of this {@code Connection}.
+     *
+     * @return the connection type
+     */
+    ConnectionType getConnectionType();
+
+    /**
      * Returns the Authorization Subject of this {@code Connection}.
      *
      * @return the Authorization Subject.
@@ -47,11 +55,21 @@ public interface AmqpConnection extends Jsonifiable.WithFieldSelectorAndPredicat
     AuthorizationSubject getAuthorizationSubject();
 
     /**
-     * Returns the sources of this {@code Connection}.
+     * Returns an optional of the sources of this {@code Connection}.
      *
      * @return the sources
      */
-    Set<String> getSources();
+    Optional<Set<String>> getSources();
+
+    /**
+     * Returns an optional of target for thing events of this {@code Connection}.
+     */
+    Optional<String> getEventTarget();
+
+    /**
+     * Returns an optional of target for thing command replies of this {@code Connection}.
+     */
+    Optional<String> getReplyTarget();
 
     /**
      * Returns whether or not failover is enabled for this {@code Connection}.
@@ -101,6 +119,41 @@ public interface AmqpConnection extends Jsonifiable.WithFieldSelectorAndPredicat
      * @return the port.
      */
     int getPort();
+
+    /**
+     * Returns the path part of the URI of this {@code Connection}.
+     *
+     * @return the path.
+     */
+    String getPath();
+
+    /**
+     * Maximum number of messages per second processed by the bridge. 0 (default) means no limit.
+     *
+     * @return number of messages that are processed per second at most.
+     */
+    int getThrottle();
+
+    /**
+     * Whether to validate server certificates on connection establishment,
+     *
+     * @return {@code true} (default) if server certificates must be valid
+     */
+    boolean isValidateCertificates();
+
+    /**
+     * The number of consumers (connections) that will be opened to the remote server.
+     *
+     * @return number of connections that will be opened, default is {@code 1}
+     */
+    int getConsumerCount();
+
+    /**
+     * The size of the command processor pool i.e. how many processor actors.
+     *
+     * @return size of the command processor actor pool
+     */
+    int getProcessorPoolSize();
 
     /**
      * Returns all non hidden marked fields of this {@code AmqpConnection}.
@@ -159,10 +212,54 @@ public interface AmqpConnection extends Jsonifiable.WithFieldSelectorAndPredicat
                         JsonSchemaVersion.V_2);
 
         /**
+         * /**
+         * JSON field containing the {@code AmqpConnection} target.
+         */
+        public static final JsonFieldDefinition<String> EVENT_TARGET =
+                JsonFactory.newStringFieldDefinition("eventTarget", FieldType.REGULAR, JsonSchemaVersion.V_1,
+                        JsonSchemaVersion.V_2);
+
+        /**
+         * /**
+         * JSON field containing the {@code AmqpConnection} sources.
+         */
+        public static final JsonFieldDefinition<String> REPLY_TARGET =
+                JsonFactory.newStringFieldDefinition("replyTarget", FieldType.REGULAR, JsonSchemaVersion.V_1,
+                        JsonSchemaVersion.V_2);
+
+        /**
          * JSON field containing the {@code AmqpConnection} failover enabled.
          */
         public static final JsonFieldDefinition<Boolean> FAILOVER_ENABLED =
                 JsonFactory.newBooleanFieldDefinition("failoverEnabled", FieldType.REGULAR, JsonSchemaVersion.V_1,
+                        JsonSchemaVersion.V_2);
+
+        /**
+         * JSON field containing the {@code AmqpConnection} trust all certificates.
+         */
+        public static final JsonFieldDefinition<Boolean> VALIDATE_CERTIFICATES =
+                JsonFactory.newBooleanFieldDefinition("validateCertificates", FieldType.REGULAR, JsonSchemaVersion.V_1,
+                        JsonSchemaVersion.V_2);
+
+        /**
+         * JSON field containing the {@code AmqpConnection} throttle.
+         */
+        public static final JsonFieldDefinition<Integer> THROTTLE =
+                JsonFactory.newIntFieldDefinition("throttle", FieldType.REGULAR, JsonSchemaVersion.V_1,
+                        JsonSchemaVersion.V_2);
+
+        /**
+         * JSON field containing the {@code AmqpConnection} consumer count.
+         */
+        public static final JsonFieldDefinition<Integer> CONSUMER_COUNT =
+                JsonFactory.newIntFieldDefinition("consumerCount", FieldType.REGULAR, JsonSchemaVersion.V_1,
+                        JsonSchemaVersion.V_2);
+
+        /**
+         * JSON field containing the {@code AmqpConnection} processor pool size.
+         */
+        public static final JsonFieldDefinition<Integer> PROCESSOR_POOL_SIZE =
+                JsonFactory.newIntFieldDefinition("processorPoolSize", FieldType.REGULAR, JsonSchemaVersion.V_1,
                         JsonSchemaVersion.V_2);
 
         private JsonFields() {
@@ -228,10 +325,20 @@ public interface AmqpConnection extends Jsonifiable.WithFieldSelectorAndPredicat
         private static final String PORT_REGEX = "(?<" + PORT_REGEX_GROUP + ">(\\d*))?";
 
         /**
+         * Regex group for the path part of an URI.
+         */
+        public static final String PATH_REGEX_GROUP = "path";
+
+        /**
+         * Regex for the path part of an URI.
+         */
+        private static final String PATH_REGEX = "(/(?<" + PATH_REGEX_GROUP + ">(\\S+))?)?";
+
+        /**
          * Regex for an URI.
          */
         public static final String REGEX =
-                PROTOCOL_REGEX + USERNAME_REGEX + PASSWORD_REGEX + HOSTNAME_REGEX + PORT_REGEX;
+                PROTOCOL_REGEX + USERNAME_REGEX + PASSWORD_REGEX + HOSTNAME_REGEX + PORT_REGEX + PATH_REGEX;
 
         private UriRegex() {
             throw new AssertionError();

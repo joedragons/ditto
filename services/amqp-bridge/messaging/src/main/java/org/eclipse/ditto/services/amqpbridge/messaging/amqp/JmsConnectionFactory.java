@@ -9,7 +9,7 @@
  * Contributors:
  *    Bosch Software Innovations GmbH - initial contribution
  */
-package org.eclipse.ditto.services.amqpbridge.messaging;
+package org.eclipse.ditto.services.amqpbridge.messaging.amqp;
 
 import javax.jms.Connection;
 import javax.jms.ExceptionListener;

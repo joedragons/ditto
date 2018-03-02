@@ -15,16 +15,17 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
+import javax.annotation.Nullable;
 import javax.jms.JMSException;
 import javax.jms.JMSRuntimeException;
 import javax.naming.NamingException;
 
 import org.eclipse.ditto.model.base.headers.WithDittoHeaders;
 import org.eclipse.ditto.services.utils.akka.LogUtil;
+import org.eclipse.ditto.signals.commands.amqpbridge.exceptions.ConnectionUnavailableException;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorKilledException;
@@ -38,8 +39,6 @@ import akka.japi.Creator;
 import akka.japi.pf.DeciderBuilder;
 import akka.japi.pf.ReceiveBuilder;
 import scala.concurrent.duration.FiniteDuration;
-
-import org.eclipse.ditto.signals.commands.amqpbridge.exceptions.ConnectionUnavailableException;
 
 /**
  * Supervisor for {@link ConnectionActor} which means it will create, start and watch it as child actor.
@@ -55,14 +54,14 @@ public final class ConnectionSupervisorActor extends AbstractActor {
 
     private final DiagnosticLoggingAdapter log = LogUtil.obtain(this);
 
-    private final Props persistenceActorProps;
     private final String connectionId;
     private final Duration minBackoff;
     private final Duration maxBackoff;
     private final double randomFactor;
     private final SupervisorStrategy supervisorStrategy;
+    private final Props persistenceActorProps;
 
-    private ActorRef child;
+    @Nullable private ActorRef child;
     private long restartCount;
 
     private ConnectionSupervisorActor(final SupervisorStrategy supervisorStrategy,
@@ -70,8 +69,7 @@ public final class ConnectionSupervisorActor extends AbstractActor {
             final Duration maxBackoff,
             final double randomFactor,
             final ActorRef pubSubMediator,
-            final String pubSubTargetActorPath,
-            final JmsConnectionFactory jmsConnectionFactory) {
+            final ConnectionActorPropsFactory propsFactory) {
         try {
             this.connectionId = URLDecoder.decode(getSelf().path().name(), StandardCharsets.UTF_8.name());
         } catch (final UnsupportedEncodingException e) {
@@ -82,7 +80,7 @@ public final class ConnectionSupervisorActor extends AbstractActor {
         this.maxBackoff = maxBackoff;
         this.randomFactor = randomFactor;
         this.persistenceActorProps =
-                ConnectionActor.props(connectionId, pubSubMediator, pubSubTargetActorPath, jmsConnectionFactory);
+                ConnectionActor.props(connectionId, pubSubMediator, propsFactory);
     }
 
     /**
@@ -92,21 +90,20 @@ public final class ConnectionSupervisorActor extends AbstractActor {
      * NullPointerException}'s, stops it for {@link ActorKilledException}'s and escalates all others.
      * </p>
      *
-     * @param pubSubMediator the PubSub mediator actor.
      * @param minBackoff minimum (initial) duration until the child actor will started again, if it is terminated.
      * @param maxBackoff the exponential back-off is capped to this duration.
      * @param randomFactor after calculation of the exponential back-off an additional random delay based on this factor
      * is added, e.g. `0.2` adds up to `20%` delay. In order to skip this additional delay pass in `0`.
-     * @param pubSubTargetActorPath the path of the command consuming actor (via pubsub).
      * for accessing the connection cache in cluster.
+     * @param pubSubMediator the PubSub mediator actor.
+     * @param propsFactory the {@link ConnectionActorPropsFactory}
      * @return the {@link Props} to create this actor.
      */
     public static Props props(final Duration minBackoff,
             final Duration maxBackoff,
             final double randomFactor,
             final ActorRef pubSubMediator,
-            final String pubSubTargetActorPath,
-            final JmsConnectionFactory jmsConnectionFactory) {
+            final ConnectionActorPropsFactory propsFactory) {
 
         return Props.create(ConnectionSupervisorActor.class, new Creator<ConnectionSupervisorActor>() {
             private static final long serialVersionUID = 1L;
@@ -120,8 +117,7 @@ public final class ConnectionSupervisorActor extends AbstractActor {
                         .match(NamingException.class, e -> SupervisorStrategy.stop())
                         .match(ActorKilledException.class, e -> SupervisorStrategy.stop())
                         .matchAny(e -> SupervisorStrategy.escalate())
-                        .build()), minBackoff, maxBackoff, randomFactor,
-                        pubSubMediator, pubSubTargetActorPath, jmsConnectionFactory);
+                        .build()), minBackoff, maxBackoff, randomFactor, pubSubMediator, propsFactory);
             }
         });
     }
@@ -153,16 +149,18 @@ public final class ConnectionSupervisorActor extends AbstractActor {
                     restartCount += 1;
                 })
                 .matchAny(message -> {
-                    if (getChild().isPresent()) {
+                    if (child != null) {
                         if (child.equals(getSender())) {
                             log.warning("Received unhandled message from child actor '{}': {}", connectionId, message);
                             unhandled(message);
                         } else {
+                            log.debug("Forwarding <{}> message to child {}.", message.getClass().getSimpleName(),
+                                    child.path());
                             child.forward(message, getContext());
                         }
                     } else {
-                        log.warning("Received message during downtime of child actor for Connection with ID '{}'",
-                                connectionId);
+                        log.warning("Received message '{}' during downtime of child actor for Connection with ID '{}'",
+                                message.getClass().getSimpleName(), connectionId);
                         final ConnectionUnavailableException.Builder builder =
                                 ConnectionUnavailableException.newBuilder(connectionId);
                         if (message instanceof WithDittoHeaders) {
@@ -174,12 +172,8 @@ public final class ConnectionSupervisorActor extends AbstractActor {
                 .build();
     }
 
-    private Optional<ActorRef> getChild() {
-        return Optional.ofNullable(child);
-    }
-
     private void startChild() {
-        if (!getChild().isPresent()) {
+        if (child == null) {
             log.debug("Starting persistence actor for Connection with ID '{}'", connectionId);
             final ActorRef childRef = getContext().actorOf(persistenceActorProps, "pa");
             child = getContext().watch(childRef);

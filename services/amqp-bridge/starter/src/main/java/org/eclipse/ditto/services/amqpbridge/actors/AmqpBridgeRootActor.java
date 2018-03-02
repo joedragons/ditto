@@ -25,8 +25,9 @@ import javax.jms.JMSRuntimeException;
 import javax.naming.NamingException;
 
 import org.eclipse.ditto.model.base.exceptions.DittoRuntimeException;
-import org.eclipse.ditto.services.amqpbridge.messaging.AmqpConnectionBasedJmsConnectionFactory;
+import org.eclipse.ditto.services.amqpbridge.messaging.ConnectionActorPropsFactory;
 import org.eclipse.ditto.services.amqpbridge.messaging.ConnectionSupervisorActor;
+import org.eclipse.ditto.services.amqpbridge.messaging.DefaultConnectionActorPropsFactory;
 import org.eclipse.ditto.services.amqpbridge.messaging.ReconnectActor;
 import org.eclipse.ditto.services.amqpbridge.util.ConfigKeys;
 import org.eclipse.ditto.services.models.amqpbridge.AmqpBridgeMessagingConstants;
@@ -78,9 +79,6 @@ public final class AmqpBridgeRootActor extends AbstractActor {
     public static final String ACTOR_NAME = "amqpBridgeRoot";
 
     private static final String AMQP_BRIDGE_CLUSTER_ROLE = "amqp-bridge";
-
-    @SuppressWarnings("squid:S1075")
-    private static final String PROXY_ACTOR_PATH = "/user/gatewayRoot/proxy";
 
     private final DiagnosticLoggingAdapter log = LogUtil.obtain(this);
 
@@ -157,9 +155,9 @@ public final class AmqpBridgeRootActor extends AbstractActor {
         final Duration maxBackoff = config.getDuration(ConfigKeys.Connection.SUPERVISOR_EXPONENTIAL_BACKOFF_MAX);
         final double randomFactor =
                 config.getDouble(ConfigKeys.Connection.SUPERVISOR_EXPONENTIAL_BACKOFF_RANDOM_FACTOR);
-        final Props amqpConnectionSupervisorProps =
-                ConnectionSupervisorActor.props(minBackoff, maxBackoff, randomFactor, pubSubMediator,
-                        PROXY_ACTOR_PATH, AmqpConnectionBasedJmsConnectionFactory.getInstance());
+        final ConnectionActorPropsFactory propsFactory = DefaultConnectionActorPropsFactory.getInstance();
+        final Props connectionSupervisorProps =
+                ConnectionSupervisorActor.props(minBackoff, maxBackoff, randomFactor, pubSubMediator, propsFactory);
 
         final int numberOfShards = config.getInt(ConfigKeys.Cluster.NUMBER_OF_SHARDS);
         final ClusterShardingSettings shardingSettings =
@@ -168,7 +166,7 @@ public final class AmqpBridgeRootActor extends AbstractActor {
 
         final ActorRef connectionShardRegion = ClusterSharding.get(this.getContext().system())
                 .start(AmqpBridgeMessagingConstants.SHARD_REGION,
-                        amqpConnectionSupervisorProps,
+                        connectionSupervisorProps,
                         shardingSettings,
                         ShardRegionExtractor.of(numberOfShards, getContext().getSystem()));
 
