@@ -33,6 +33,8 @@ import org.eclipse.ditto.services.thingsearch.querymodel.expression.ThingsFieldE
 import org.eclipse.ditto.services.thingsearch.querymodel.expression.ThingsFieldExpressionFactoryImpl;
 import org.eclipse.ditto.services.thingsearch.querymodel.query.AggregationBuilderFactory;
 import org.eclipse.ditto.services.thingsearch.querymodel.query.QueryBuilderFactory;
+import org.eclipse.ditto.services.thingsearch.starter.actors.monitoring.KamonCommandListener;
+import org.eclipse.ditto.services.thingsearch.starter.actors.monitoring.KamonConnectionPoolListener;
 import org.eclipse.ditto.services.utils.cluster.ClusterStatusSupplier;
 import org.eclipse.ditto.services.utils.config.ConfigUtil;
 import org.eclipse.ditto.services.utils.health.DefaultHealthCheckingActorFactory;
@@ -40,6 +42,8 @@ import org.eclipse.ditto.services.utils.health.HealthCheckingActorOptions;
 import org.eclipse.ditto.services.utils.health.routes.StatusRoute;
 import org.eclipse.ditto.services.utils.persistence.mongo.MongoClientWrapper;
 
+import com.mongodb.event.CommandListener;
+import com.mongodb.event.ConnectionPoolListener;
 import com.typesafe.config.Config;
 
 import akka.actor.AbstractActor;
@@ -130,7 +134,14 @@ public final class SearchRootActor extends AbstractActor {
             hcBuilder.enablePersistenceCheck();
         }
 
-        final MongoClientWrapper mongoClientWrapper = MongoClientWrapper.newInstance(config);
+        final CommandListener kamonCommandListener = config.getBoolean(ConfigKeys.MONITORING_COMMANDS_ENABLED) ?
+                new KamonCommandListener() : null;
+        final ConnectionPoolListener kamonConnectionPoolListener =
+                config.getBoolean(ConfigKeys.MONITORING_CONNECTION_POOL_ENABLED) ?
+                        new KamonConnectionPoolListener() : null;
+
+        final MongoClientWrapper mongoClientWrapper =
+                MongoClientWrapper.newInstance(config, kamonCommandListener, kamonConnectionPoolListener);
 
         final ActorRef mongoHealthCheckActor = startChildActor(MongoReactiveHealthCheckActor.ACTOR_NAME,
                 MongoReactiveHealthCheckActor.props(mongoClientWrapper));
