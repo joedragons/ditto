@@ -136,7 +136,7 @@ public abstract class PersistenceActorTestBase {
     }
 
     private void init(final Config config) {
-        actorSystem = ActorSystem.create("AkkaTestSystem", config);
+        actorSystem = ActorSystem.create(getClass().getSimpleName() + "System", config);
         pubSubMediator = new TestProbe(actorSystem, "mock-pubSub-mediator").ref();
         dittoHeadersMockV2 = createDittoHeadersMock(JsonSchemaVersion.V_2, AUTH_SUBJECT);
     }
