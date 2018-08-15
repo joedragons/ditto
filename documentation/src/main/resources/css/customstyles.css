@@ -1,12 +1,13 @@
 body {
-    font-size:15px;
+    font-size:16px;
     font-family: Open Sans, sans-serif;
     padding-top: 50px; /* Required padding for .navbar-fixed-top. Remove if using .navbar-static-top. Change if height of navigation changes. */
 }
 
+/*
 h1,h2 {
-    font-weight: bold;
-}
+    font-weight: lighter;
+} */
 
 a.navbar-ditto-home:hover {
     color: transparent;
@@ -42,6 +43,7 @@ a.navbar-ditto-home:hover {
 
 .text-primary {
     color: #3a8c9a;
+    /* affects color around images in startpage */
 }
 
 .equal {
@@ -80,10 +82,10 @@ a.navbar-ditto-home:hover {
     color: #777;
 }
 .bs-callout-primary {
-    border-left-color: #428bca;
+    border-left-color: #3a8c9a;
 }
 .bs-callout-primary h4 {
-    color: #428bca;
+    color: #3a8c9a;
 }
 .bs-callout-success {
     border-left-color: #5cb85c;
@@ -104,10 +106,10 @@ a.navbar-ditto-home:hover {
     color: #f0ad4e;
 }
 .bs-callout-info {
-    border-left-color: #5bc0de;
+border-left-color: #3a8c9a;
 }
 .bs-callout-info h4 {
-    color: #5bc0de;
+color: #3a8c9a;
 }
 
 
@@ -181,6 +183,7 @@ table:not(.parameters):not(.responses-table):not(.headers):not(.model) {
     max-width: 90%;
     margin-bottom: 20px;
     border: 1px solid #dedede;
+    font-size: smaller;
 }
 
 table:not(.parameters):not(.responses-table):not(.headers):not(.model) > thead > tr > th,
@@ -196,11 +199,11 @@ table:not(.parameters):not(.responses-table):not(.headers):not(.model) > tfoot >
 }
 table:not(.parameters):not(.responses-table):not(.headers):not(.model) > thead > tr > th {
     vertical-align: bottom;
-    border-bottom: 2px solid #ddd;
+    border-bottom: 1px solid #ddd;
     text-transform: none;
-    background-color: #777;
+    /*background-color: #8D8D8D;
     color: white;
-    text-align: left;
+    text-align: left;*/
 }
 table:not(.parameters):not(.responses-table):not(.headers):not(.model) > caption + thead > tr:first-child > th,
 table:not(.parameters):not(.responses-table):not(.headers):not(.model) > colgroup + thead > tr:first-child > th,
@@ -244,7 +247,7 @@ p.external a {
 }
 p.post-meta {font-size: 80%; color: #777;}
 
-.entry-date{font-size:14px;font-size:0.875rem;line-height:1.71429;margin-bottom:0;text-transform:uppercase;}
+.entry-date{font-size:14px; line-height:1.71429; margin-bottom:0; text-transform:uppercase;}
 
 /* search area */
 #search-demo-container ul#results-container {
@@ -621,10 +624,9 @@ hr.faded {
 }
 
 hr.shaded {
-    height: 12px;
+    height: 1px;
     border: 0;
     margin-top: 70px;
-    background: white;
     width: 100%;
     margin-bottom: 10px;
 }
@@ -721,7 +723,7 @@ div.tags {padding: 10px 5px;}
 }
 
 hr {
-    background: #999;
+    background: #3a8c9a;
     margin: 30px 0px;
     width: 90%;
     margin-left: auto;
@@ -741,7 +743,6 @@ span.otherProgrammingLanguages {
 }
 
 a[data-toggle="tooltip"] {
-    color: #649345;
     font-style: italic;
     cursor: default;
 }
@@ -772,6 +773,7 @@ ol.series li {
     display: block;
 }
 
+
 .versionTagline {
     text-align: center;
     margin-bottom: 20px;
@@ -781,11 +783,11 @@ ol.series li {
     display:block;
 }
 
-/* not sure if using this ...*/
 .navbar-inverse .navbar-collapse, .navbar-inverse .navbar-form {
     border-color: #248ec2 !important;
 }
 
+/* important for navigation expanding/collapsing */
 #mysidebar.nav ul {
     background-color: #FAFAFA;
 }
@@ -1083,7 +1085,8 @@ div.results {
 }
 
 .post-link {
-    font-size: 22px;
+    font-size: 30px;
+    color: #3a8c9a;
 }
 
 .post-list p {

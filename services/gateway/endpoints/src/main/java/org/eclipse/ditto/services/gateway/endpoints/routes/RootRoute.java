@@ -15,6 +15,7 @@ import static akka.http.javadsl.server.Directives.complete;
 import static akka.http.javadsl.server.Directives.extractRequestContext;
 import static akka.http.javadsl.server.Directives.handleExceptions;
 import static akka.http.javadsl.server.Directives.handleRejections;
+import static akka.http.javadsl.server.Directives.parameterOptional;
 import static akka.http.javadsl.server.Directives.pathPrefixTest;
 import static akka.http.javadsl.server.Directives.rawPathPrefix;
 import static akka.http.javadsl.server.Directives.route;
@@ -22,22 +23,20 @@ import static org.eclipse.ditto.model.base.common.ConditionChecker.checkNotNull;
 import static org.eclipse.ditto.services.gateway.endpoints.directives.CorrelationIdEnsuringDirective.ensureCorrelationId;
 import static org.eclipse.ditto.services.gateway.endpoints.directives.CustomPathMatchers.mergeDoubleSlashes;
 import static org.eclipse.ditto.services.gateway.endpoints.directives.DevopsBasicAuthenticationDirective.REALM_DEVOPS;
-import static org.eclipse.ditto.services.gateway.endpoints.directives.DevopsBasicAuthenticationDirective.REALM_HEALTH;
 import static org.eclipse.ditto.services.gateway.endpoints.directives.DevopsBasicAuthenticationDirective.authenticateDevopsBasic;
 import static org.eclipse.ditto.services.gateway.endpoints.directives.RequestResultLoggingDirective.logRequestResult;
-import static org.eclipse.ditto.services.gateway.endpoints.directives.ResponseRewritingDirective.rewriteResponse;
 import static org.eclipse.ditto.services.gateway.endpoints.directives.auth.AuthorizationContextVersioningDirective.mapAuthorizationContext;
 import static org.eclipse.ditto.services.gateway.endpoints.utils.DirectivesLoggingUtils.enhanceLogWithCorrelationId;
 
-import java.util.AbstractMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
+
+import javax.annotation.Nullable;
 
 import org.eclipse.ditto.json.JsonRuntimeException;
 import org.eclipse.ditto.model.base.auth.AuthorizationContext;
@@ -48,8 +47,8 @@ import org.eclipse.ditto.model.base.headers.DittoHeaders;
 import org.eclipse.ditto.model.base.headers.DittoHeadersBuilder;
 import org.eclipse.ditto.model.base.json.JsonSchemaVersion;
 import org.eclipse.ditto.model.policies.SubjectIssuer;
-import org.eclipse.ditto.protocoladapter.DittoProtocolAdapter;
-import org.eclipse.ditto.services.base.metrics.StatsdMetricsReporter;
+import org.eclipse.ditto.protocoladapter.ProtocolAdapter;
+import org.eclipse.ditto.protocoladapter.TopicPath;
 import org.eclipse.ditto.services.gateway.endpoints.directives.CorsEnablingDirective;
 import org.eclipse.ditto.services.gateway.endpoints.directives.EncodingEnsuringDirective;
 import org.eclipse.ditto.services.gateway.endpoints.directives.HttpsEnsuringDirective;
@@ -79,16 +78,16 @@ import org.eclipse.ditto.services.gateway.health.StatusAndHealthProvider;
 import org.eclipse.ditto.services.gateway.starter.service.util.ConfigKeys;
 import org.eclipse.ditto.services.gateway.starter.service.util.HttpClientFacade;
 import org.eclipse.ditto.services.utils.health.cluster.ClusterStatus;
+import org.eclipse.ditto.services.utils.protocol.ProtocolAdapterProvider;
+import org.eclipse.ditto.services.utils.protocol.ProtocolConfigReader;
 import org.eclipse.ditto.signals.commands.base.CommandNotSupportedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.codahale.metrics.MetricRegistry;
 import com.typesafe.config.Config;
 
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
-import akka.dispatch.MessageDispatcher;
 import akka.http.javadsl.model.ContentTypes;
 import akka.http.javadsl.model.HttpResponse;
 import akka.http.javadsl.model.StatusCodes;
@@ -110,8 +109,6 @@ public final class RootRoute {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RootRoute.class);
 
-    private static final String BLOCKING_DISPATCHER_NAME = "blocking-dispatcher";
-
     private static final String JWT_ISSUER_GOOGLE_DOMAIN = "accounts.google.com";
     private static final String JWT_ISSUER_GOOGLE_URL = "https://accounts.google.com";
     private static final String JWK_RESOURCE_GOOGLE = "https://www.googleapis.com/oauth2/v2/certs";
@@ -121,7 +118,6 @@ public final class RootRoute {
      */
     public static final Pattern DEVOPS_AUTH_SECURED = Pattern.compile("(" +
             OverallStatusRoute.PATH_STATUS + "|" +
-            CachingHealthRoute.PATH_HEALTH + "|" +
             DevOpsRoute.PATH_DEVOPS + ").*"
     );
 
@@ -140,6 +136,7 @@ public final class RootRoute {
     private final ExceptionHandler exceptionHandler;
     private final List<Integer> supportedSchemaVersions;
     private final RejectionHandler rejectionHandler = DittoRejectionHandlerFactory.createInstance();
+    private final ProtocolAdapter protocolAdapter;
 
     /**
      * Constructs the {@code /} route builder.
@@ -161,7 +158,6 @@ public final class RootRoute {
         checkNotNull(actorSystem, "Actor System");
         checkNotNull(proxyActor, "proxyActor");
 
-        final MessageDispatcher blockingDispatcher = actorSystem.dispatchers().lookup(BLOCKING_DISPATCHER_NAME);
         final StatusAndHealthProvider
                 statusHealthProvider = DittoStatusAndHealthProviderFactory.of(actorSystem, clusterStateSupplier);
 
@@ -180,21 +176,26 @@ public final class RootRoute {
                 config.getDuration(ConfigKeys.CLAIMMESSAGE_DEFAULT_TIMEOUT),
                 config.getDuration(ConfigKeys.CLAIMMESSAGE_MAX_TIMEOUT));
         thingSearchRoute = new ThingSearchRoute(proxyActor, actorSystem);
+
         websocketRoute = new WebsocketRoute(streamingActor,
                 config.getInt(ConfigKeys.WEBSOCKET_SUBSCRIBER_BACKPRESSURE),
                 config.getInt(ConfigKeys.WEBSOCKET_PUBLISHER_BACKPRESSURE),
-                DittoProtocolAdapter.newInstance(), actorSystem.eventStream());
+                actorSystem.eventStream());
 
         supportedSchemaVersions = config.getIntList(ConfigKeys.SCHEMA_VERSIONS);
 
         apiAuthenticationDirective =
-                generateGatewayAuthenticationDirective(config, httpClient, blockingDispatcher);
+                generateGatewayAuthenticationDirective(config, httpClient);
         wsAuthenticationDirective = apiAuthenticationDirective;
         exceptionHandler = createExceptionHandler();
+
+        final ProtocolConfigReader protocolConfig = ProtocolConfigReader.fromRawConfig(config);
+        final ProtocolAdapterProvider protocolAdapterProvider = protocolConfig.loadProtocolAdapterProvider(actorSystem);
+        protocolAdapter = protocolAdapterProvider.createProtocolAdapter();
     }
 
     private GatewayAuthenticationDirective generateGatewayAuthenticationDirective(final Config config,
-            final HttpClientFacade httpClient, final MessageDispatcher blockingDispatcher) {
+            final HttpClientFacade httpClient) {
         final boolean dummyAuthEnabled = config.getBoolean(ConfigKeys.AUTHENTICATION_DUMMY_ENABLED);
 
         final List<AuthenticationProvider> authenticationChain = new LinkedList<>();
@@ -204,15 +205,11 @@ public final class RootRoute {
         }
 
 
-        final Map.Entry<String, MetricRegistry> namedPublicKeysCacheMetricRegistry =
-                new AbstractMap.SimpleImmutableEntry<>("ditto.auth.jwt.publicKeys.cache", new MetricRegistry());
-        StatsdMetricsReporter.getInstance().add(namedPublicKeysCacheMetricRegistry);
         final JwtSubjectIssuersConfig jwtSubjectIssuersConfig = buildJwtSubjectIssuersConfig();
 
         final PublicKeyProvider publicKeyProvider = DittoPublicKeyProvider.of(jwtSubjectIssuersConfig, httpClient,
                 config.getInt(ConfigKeys.CACHE_PUBLIC_KEYS_MAX),
-                config.getDuration(ConfigKeys.CACHE_PUBLIC_KEYS_EXPIRY),
-                namedPublicKeysCacheMetricRegistry);
+                config.getDuration(ConfigKeys.CACHE_PUBLIC_KEYS_EXPIRY), "ditto_authorization_jwt_publicKeys_cache");
         final DittoAuthorizationSubjectsProvider authorizationSubjectsProvider =
                 DittoAuthorizationSubjectsProvider.of(jwtSubjectIssuersConfig);
 
@@ -243,36 +240,31 @@ public final class RootRoute {
                 extractRequestContext(ctx ->
                         route(
                                 statsRoute.buildStatsRoute(correlationId), // /stats
+                                cachingHealthRoute.buildHealthRoute(), // /health
                                 api(ctx, correlationId), // /api
                                 ws(correlationId), // /ws
-                                pathPrefixTest(PathMatchers.segment(DEVOPS_AUTH_SECURED), segment -> {
-                                    final String realm = getRealmFromSegment(segment);
-                                    return authenticateDevopsBasic(realm,
+                                pathPrefixTest(PathMatchers.segment(DEVOPS_AUTH_SECURED), segment ->
+                                    authenticateDevopsBasic(REALM_DEVOPS,
                                             route(
                                                     overallStatusRoute.buildStatusRoute(), // /status
-                                                    cachingHealthRoute.buildHealthRoute(), // /health
                                                     devopsRoute.buildDevopsRoute(ctx) // /devops
                                             )
-                                    );
-                                })
-
-
+                                    )
+                                )
                         )
                 )
         );
     }
 
-    private Route wrapWithRootDirectives(final Function<String, Route> rootRoute) {
+    private Route wrapWithRootDirectives(final java.util.function.Function<String, Route> rootRoute) {
         final Function<Function<String, Route>, Route> outerRouteProvider = innerRouteProvider ->
                 /* the outer handleExceptions is for handling exceptions in the directives wrapping the rootRoute
                    (which normally should not occur */
                 handleExceptions(exceptionHandler, () ->
                         ensureCorrelationId(correlationId ->
-                                rewriteResponse(correlationId, () ->
-                                        RequestTimeoutHandlingDirective.handleRequestTimeout(correlationId, () ->
-                                                logRequestResult(correlationId, () ->
-                                                        innerRouteProvider.apply(correlationId)
-                                                )
+                                RequestTimeoutHandlingDirective.handleRequestTimeout(correlationId, () ->
+                                        logRequestResult(correlationId, () ->
+                                                innerRouteProvider.apply(correlationId)
                                         )
                                 )
                         )
@@ -299,7 +291,6 @@ public final class RootRoute {
                                 )
                         )
                 );
-
         return outerRouteProvider.apply(innerRouteProvider);
     }
 
@@ -326,12 +317,15 @@ public final class RootRoute {
                                                 apiVersion,
                                                 authContextWithPrefixedSubjects,
                                                 authContext ->
-                                                        extractDittoHeaders(
-                                                                authContext,
-                                                                apiVersion,
-                                                                correlationId,
-                                                                dittoHeaders ->
-                                                                        buildApiSubRoutes(ctx, dittoHeaders)
+                                                        parameterOptional(TopicPath.Channel.LIVE.getName(), liveParam ->
+                                                                extractDittoHeaders(
+                                                                        authContext,
+                                                                        apiVersion,
+                                                                        correlationId,
+                                                                        liveParam.orElse(null),
+                                                                        dittoHeaders ->
+                                                                                buildApiSubRoutes(ctx, dittoHeaders)
+                                                                )
                                                         )
                                         )
                         )
@@ -366,7 +360,7 @@ public final class RootRoute {
                 // /api/{apiVersion}/policies
                 policiesRoute.buildPoliciesRoute(ctx, dittoHeaders),
                 // /api/{apiVersion}/things SSE support
-                sseThingsRoute.buildThingsSseRoute(ctx, dittoHeaders),
+                sseThingsRoute.buildThingsSseRoute(ctx, dittoHeaders, Function.identity()),
                 // /api/{apiVersion}/things
                 thingsRoute.buildThingsRoute(ctx, dittoHeaders),
                 // /api/{apiVersion}/search/things
@@ -387,7 +381,7 @@ public final class RootRoute {
                                         authContextWithPrefixedSubjects,
                                         authContext ->
                                                 websocketRoute.buildWebsocketRoute(wsVersion, correlationId,
-                                                        authContext)
+                                                        authContext, protocolAdapter)
                                 )
                         )
                 )
@@ -395,10 +389,10 @@ public final class RootRoute {
     }
 
     private static Route extractDittoHeaders(final AuthorizationContext authorizationContext,
-            final Integer version, final String correlationId,
+            final Integer version, final String correlationId, @Nullable final String liveParm,
             final Function<DittoHeaders, Route> inner) {
 
-        final DittoHeaders dittoHeaders = buildDittoHeaders(authorizationContext, version, correlationId);
+        final DittoHeaders dittoHeaders = buildDittoHeaders(authorizationContext, version, correlationId, liveParm);
         return inner.apply(dittoHeaders);
     }
 
@@ -430,7 +424,7 @@ public final class RootRoute {
     }
 
     private static DittoHeaders buildDittoHeaders(final AuthorizationContext authorizationContext,
-            final Integer version, final String correlationId) {
+            final Integer version, final String correlationId, @Nullable final String liveParm) {
         final JsonSchemaVersion jsonSchemaVersion = JsonSchemaVersion.forInt(version)
                 .orElseThrow(() -> CommandNotSupportedException.newBuilder(version).build());
         final DittoHeadersBuilder builder = DittoHeaders.newBuilder()
@@ -438,24 +432,13 @@ public final class RootRoute {
                 .schemaVersion(jsonSchemaVersion)
                 .correlationId(correlationId);
 
+        if (liveParm != null) { // once the "live" query param was set - no matter what the value was - use live channel
+            builder.channel(TopicPath.Channel.LIVE.getName());
+        }
+
         authorizationContext.getFirstAuthorizationSubject().map(AuthorizationSubject::getId).ifPresent(builder::source);
 
         return builder.build();
     }
-
-    /**
-     * Computes the basic-auth realm from the path segment.
-     *
-     * @param segment The path segment, should match {@link this#DEVOPS_AUTH_SECURED}
-     * @return Basic-auth realm for the path
-     */
-    private static String getRealmFromSegment(final String segment) {
-        if (segment.startsWith(CachingHealthRoute.PATH_HEALTH)) {
-            return REALM_HEALTH;
-        } else {
-            return REALM_DEVOPS;
-        }
-    }
-
 }
 

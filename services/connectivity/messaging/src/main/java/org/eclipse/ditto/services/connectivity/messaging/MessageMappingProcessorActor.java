@@ -13,9 +13,10 @@ package org.eclipse.ditto.services.connectivity.messaging;
 
 
 import java.util.Collections;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
 
@@ -32,13 +33,12 @@ import org.eclipse.ditto.model.base.headers.DittoHeadersBuilder;
 import org.eclipse.ditto.model.base.headers.WithDittoHeaders;
 import org.eclipse.ditto.model.connectivity.ExternalMessage;
 import org.eclipse.ditto.services.utils.akka.LogUtil;
-import org.eclipse.ditto.services.utils.cache.Cache;
-import org.eclipse.ditto.services.utils.cache.CaffeineCache;
+import org.eclipse.ditto.services.utils.metrics.instruments.timer.StartedTimer;
+import org.eclipse.ditto.services.utils.tracing.TraceUtils;
+import org.eclipse.ditto.services.utils.tracing.TracingTags;
 import org.eclipse.ditto.signals.base.Signal;
 import org.eclipse.ditto.signals.commands.base.CommandResponse;
 import org.eclipse.ditto.signals.commands.things.ThingErrorResponse;
-
-import com.github.benmanes.caffeine.cache.Caffeine;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
@@ -48,9 +48,6 @@ import akka.cluster.pubsub.DistributedPubSubMediator;
 import akka.event.DiagnosticLoggingAdapter;
 import akka.japi.Creator;
 import akka.japi.pf.ReceiveBuilder;
-import kamon.Kamon;
-import kamon.trace.TraceContext;
-import scala.Option;
 
 /**
  * This Actor processes incoming {@link Signal}s and dispatches them via {@link DistributedPubSubMediator} to a
@@ -66,28 +63,23 @@ public final class MessageMappingProcessorActor extends AbstractActor {
     private final DiagnosticLoggingAdapter log = LogUtil.obtain(this);
 
     private final ActorRef publisherActor;
-    private final AuthorizationContext authorizationContext;
-    private final Cache<String, TraceContext> traces;
+    private final Map<String, StartedTimer> timers;
 
-    private final DittoHeadersFilter headerFilter;
     private final MessageMappingProcessor processor;
     private final String connectionId;
     private final ActorRef conciergeForwarder;
+    private final PlaceholderFilter placeholderFilter;
 
     private MessageMappingProcessorActor(final ActorRef publisherActor,
-            final ActorRef conciergeForwarder, final AuthorizationContext authorizationContext,
-            final DittoHeadersFilter headerFilter,
+            final ActorRef conciergeForwarder,
             final MessageMappingProcessor processor,
             final String connectionId) {
         this.publisherActor = publisherActor;
         this.conciergeForwarder = conciergeForwarder;
-        this.authorizationContext = authorizationContext;
         this.processor = processor;
-        this.headerFilter = headerFilter;
         this.connectionId = connectionId;
-        final Caffeine caffeine = Caffeine.newBuilder()
-                .expireAfterWrite(5, TimeUnit.MINUTES);
-        traces = CaffeineCache.of(caffeine);
+        this.placeholderFilter = new PlaceholderFilter();
+        timers = new ConcurrentHashMap<>();
     }
 
     /**
@@ -95,15 +87,12 @@ public final class MessageMappingProcessorActor extends AbstractActor {
      *
      * @param publisherActor actor that handles/publishes outgoing messages.
      * @param conciergeForwarder the actor used to send signals to the concierge service.
-     * @param authorizationContext the authorization context (authorized subjects) that are set in command headers.
-     * @param headerFilter the header filter used to apply on responses.
      * @param processor the MessageMappingProcessor to use.
      * @param connectionId the connection id.
      * @return the Akka configuration Props object.
      */
     public static Props props(final ActorRef publisherActor,
-            final ActorRef conciergeForwarder, final AuthorizationContext authorizationContext,
-            final DittoHeadersFilter headerFilter,
+            final ActorRef conciergeForwarder,
             final MessageMappingProcessor processor,
             final String connectionId) {
 
@@ -112,33 +101,9 @@ public final class MessageMappingProcessorActor extends AbstractActor {
 
             @Override
             public MessageMappingProcessorActor create() {
-                return new MessageMappingProcessorActor(publisherActor, conciergeForwarder, authorizationContext,
-                        headerFilter, processor, connectionId);
+                return new MessageMappingProcessorActor(publisherActor, conciergeForwarder, processor, connectionId);
             }
         });
-    }
-
-    /**
-     * Creates Akka configuration object for this actor.
-     *
-     * @param publisherActor actor that handles outgoing messages.
-     * @param conciergeForwarder the actor used to send signals to the concierge service.
-     * @param authorizationContext the authorization context (authorized subjects) that are set in command headers.
-     * @param processor the MessageMappingProcessor to use.
-     * @param connectionId the connection id.
-     * @return the Akka configuration Props object.
-     */
-    public static Props props(final ActorRef publisherActor,
-            final ActorRef conciergeForwarder,
-            final AuthorizationContext authorizationContext,
-            final MessageMappingProcessor processor,
-            final String connectionId) {
-
-        return props(publisherActor,
-                conciergeForwarder,
-                authorizationContext,
-                new DittoHeadersFilter(DittoHeadersFilter.Mode.EXCLUDE, Collections.emptyList()),
-                processor, connectionId);
     }
 
 
@@ -147,6 +112,7 @@ public final class MessageMappingProcessorActor extends AbstractActor {
         return ReceiveBuilder.create()
                 .match(ExternalMessage.class, this::handle)
                 .match(CommandResponse.class, this::handleCommandResponse)
+                .match(OutboundSignal.class, this::handleOutboundSignal)
                 .match(Signal.class, this::handleSignal)
                 .match(DittoRuntimeException.class, this::handleDittoRuntimeException)
                 .match(Status.Failure.class, f -> log.warning("Got failure with cause {}: {}",
@@ -164,20 +130,21 @@ public final class MessageMappingProcessorActor extends AbstractActor {
         LogUtil.enhanceLogWithCustomField(log, BaseClientData.MDC_CONNECTION_ID, connectionId);
         log.debug("Handling ExternalMessage: {}", externalMessage);
 
-        final String authSubjectsArray = authorizationContext.stream()
-                .map(AuthorizationSubject::getId)
-                .map(JsonFactory::newValue)
-                .collect(JsonCollectors.valuesToArray())
-                .toString();
-        final ExternalMessage messageWithAuthSubject =
-                externalMessage.withHeader(DittoHeaderDefinition.AUTHORIZATION_SUBJECTS.getKey(), authSubjectsArray);
-
         try {
+            final AuthorizationContext authorizationContext = getAuthorizationContextFromMessage(externalMessage);
+            final AuthorizationContext filteredContext =
+                    placeholderFilter.filterAuthorizationContext(authorizationContext, externalMessage.getHeaders());
+            final String authSubjectsArray = mapAuthorizationContextToSubjectsArray(filteredContext);
+            final ExternalMessage messageWithAuthSubject =
+                    externalMessage.withHeader(DittoHeaderDefinition.AUTHORIZATION_SUBJECTS.getKey(),
+                            authSubjectsArray);
+
             final Optional<Signal<?>> signalOpt = processor.process(messageWithAuthSubject);
+
             signalOpt.ifPresent(signal -> {
                 enhanceLogUtil(signal);
                 final DittoHeadersBuilder adjustedHeadersBuilder = signal.getDittoHeaders().toBuilder()
-                        .authorizationContext(authorizationContext);
+                        .authorizationContext(filteredContext);
 
                 if (!signal.getDittoHeaders().getOrigin().isPresent()) {
                     adjustedHeadersBuilder.origin(connectionId);
@@ -187,7 +154,11 @@ public final class MessageMappingProcessorActor extends AbstractActor {
                 // does not choose/change the auth-subjects itself:
                 final Signal<?> adjustedSignal = signal.setDittoHeaders(adjustedHeaders);
                 startTrace(adjustedSignal);
-                log.info("Sending '{}' using conciergeForwarder", adjustedSignal.getType());
+
+                // This message is important to check if a command is accepted for a specific connection, as this
+                // happens quite a lot this is going to the debug level. Use best with a connection-id filter.
+                log.debug("Message successfully mapped to signal: '{}'. Passing to conciergeForwarder", adjustedSignal
+                        .getType());
                 conciergeForwarder.tell(adjustedSignal, getSelf());
             });
         } catch (final DittoRuntimeException e) {
@@ -195,6 +166,25 @@ public final class MessageMappingProcessorActor extends AbstractActor {
         } catch (final Exception e) {
             log.warning("Got <{}> when message was processed: <{}>", e.getClass().getSimpleName(), e.getMessage());
         }
+    }
+
+    private String mapAuthorizationContextToSubjectsArray(final AuthorizationContext authorizationContext) {
+        return authorizationContext
+                .stream()
+                .map(AuthorizationSubject::getId)
+                .map(JsonFactory::newValue)
+                .collect(JsonCollectors.valuesToArray())
+                .toString();
+    }
+
+    private AuthorizationContext getAuthorizationContextFromMessage(final ExternalMessage externalMessage) {
+        final AuthorizationContext authorizationContext = externalMessage
+                .getAuthorizationContext()
+                .orElseThrow(() -> new IllegalArgumentException("No authorizationContext available."));
+        if (authorizationContext.isEmpty()) {
+            throw new IllegalArgumentException("Empty authorization context not allowed.");
+        }
+        return authorizationContext;
     }
 
     private void enhanceLogUtil(final WithDittoHeaders<?> signal) {
@@ -238,27 +228,46 @@ public final class MessageMappingProcessorActor extends AbstractActor {
         }
     }
 
-    private void handleSignal(final Signal<?> signal) {
+    private void handleOutboundSignal(final OutboundSignal outbound) {
+        final Signal<?> signal = outbound.getSource();
         enhanceLogUtil(signal);
-        log.debug("Handling signal: {}", signal);
+        log.debug("Handling outbound signal: {}", signal);
+        mapToExternalMessage(signal)
+                .map(message -> new MappedOutboundSignal(outbound, message))
+                .ifPresent(outboundSignal -> publisherActor.forward(outboundSignal, getContext()));
+    }
 
+    /**
+     * Is called for responses or errors which were directly sent to the mapping actor as a response.
+     *
+     * @param signal the response/error
+     */
+    private void handleSignal(final Signal<?> signal) {
+        // map to outbound signal without authorized target (responses and errors are only sent to its origin)
+        log.debug("Handling raw signal: {}", signal);
+        handleOutboundSignal(new UnmappedOutboundSignal(signal, Collections.emptySet()));
+    }
+
+    private Optional<ExternalMessage> mapToExternalMessage(final Signal<?> signal) {
         try {
-            final DittoHeaders filteredDittoHeaders = headerFilter.apply(signal.getDittoHeaders());
-            final Signal signalWithFilteredHeaders = signal.setDittoHeaders(filteredDittoHeaders);
-            processor.process(signalWithFilteredHeaders)
-                    .ifPresent(message -> publisherActor.forward(message, getContext()));
+            return processor.process(signal);
         } catch (final DittoRuntimeException e) {
             log.info("Got DittoRuntimeException during processing Signal: {} - {}", e.getMessage(),
                     e.getDescription().orElse(""));
         } catch (final Exception e) {
             log.warning("Got unexpected exception during processing Signal: {}", e.getMessage());
         }
+        return Optional.empty();
     }
 
     private void startTrace(final Signal<?> command) {
-        command.getDittoHeaders().getCorrelationId().ifPresent(correlationId ->
-                traces.put(correlationId, createRoundtripContext(correlationId, connectionId, command.getType()))
-        );
+        command.getDittoHeaders().getCorrelationId().ifPresent(correlationId -> {
+            final StartedTimer timer = TraceUtils
+                    .newAmqpRoundTripTimer(command)
+                    .expirationHandling(startedTimer -> this.timers.remove(correlationId))
+                    .build();
+            this.timers.put(correlationId, timer);
+        });
     }
 
     private void finishTrace(final Signal<?> response) {
@@ -280,25 +289,15 @@ public final class MessageMappingProcessorActor extends AbstractActor {
     }
 
     private void finishTrace(final String correlationId, @Nullable final Throwable cause) {
-        final Optional<TraceContext> ctxOpt = traces.getBlocking(correlationId);
-        if (!ctxOpt.isPresent()) {
+        final StartedTimer timer = timers.remove(correlationId);
+        if (Objects.isNull(timer)) {
             throw new IllegalArgumentException("No trace found for correlationId: " + correlationId);
         }
-        final TraceContext ctx = ctxOpt.get();
-        traces.invalidate(correlationId);
-        if (Objects.isNull(cause)) {
-            ctx.finish();
-        } else {
-            ctx.finishWithError(cause);
-        }
-    }
 
-    private static TraceContext createRoundtripContext(final String correlationId, final String connectionId,
-            final String type) {
-        final Option<String> token = Option.apply(correlationId);
-        final TraceContext ctx = Kamon.tracer().newContext("roundtrip." + connectionId + "." + type,
-                token);
-        ctx.addMetadata("command", type);
-        return ctx;
+        if (Objects.isNull(cause)) {
+            timer.tag(TracingTags.MAPPING_SUCCESS, true).stop();
+        } else {
+            timer.tag(TracingTags.MAPPING_SUCCESS, false).stop();
+        }
     }
 }

@@ -1,4 +1,4 @@
-FROM adoptopenjdk/openjdk8-openj9:jdk8u162-b12_openj9-0.8.0-alpine
+FROM adoptopenjdk/openjdk8-openj9:x86_64-alpine-jdk8u181-b13_openj9-0.9.0-rc2-slim
 
 ARG MAVEN_REPO=https://repo.eclipse.org/content/repositories/ditto/org/eclipse/ditto/
 ARG SERVICE_STARTER
@@ -18,7 +18,8 @@ RUN set -x \
     && cd $DITTO_HOME \
     && wget -q --show-progress -O ${SERVICE_STARTER}-${SERVICE_VERSION}-allinone.jar ${MAVEN_REPO}${SERVICE_STARTER}/${SERVICE_VERSION}/${SERVICE_STARTER}-${SERVICE_VERSION}-allinone.jar \
     && ln -s ${SERVICE_STARTER}-${SERVICE_VERSION}-allinone.jar starter.jar \
-    && apk del .tmp-deps
+    && apk del .tmp-deps \
+    && apk add --no-cache tini
 
 WORKDIR $DITTO_HOME
 ENTRYPOINT ["java","-jar","starter.jar"]

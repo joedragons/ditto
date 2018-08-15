@@ -28,6 +28,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.stream.StreamSupport;
 
 import org.eclipse.ditto.json.JsonField;
@@ -43,8 +44,8 @@ import org.eclipse.ditto.services.gateway.endpoints.routes.AbstractRoute;
 import org.eclipse.ditto.services.gateway.endpoints.routes.things.ThingsParameter;
 import org.eclipse.ditto.services.gateway.streaming.Connect;
 import org.eclipse.ditto.services.gateway.streaming.StartStreaming;
-import org.eclipse.ditto.services.models.concierge.streaming.StreamingType;
 import org.eclipse.ditto.services.gateway.streaming.actors.EventAndResponsePublisher;
+import org.eclipse.ditto.services.models.concierge.streaming.StreamingType;
 import org.eclipse.ditto.signals.events.things.AclEntryCreated;
 import org.eclipse.ditto.signals.events.things.AclEntryDeleted;
 import org.eclipse.ditto.signals.events.things.AclEntryModified;
@@ -121,20 +122,23 @@ public class SseThingsRoute extends AbstractRoute {
      * @return {@code /things} SSE route.
      */
     @SuppressWarnings("squid:S1172") // allow unused ctx-Param in order to have a consistent route-"interface"
-    public Route buildThingsSseRoute(final RequestContext ctx, final DittoHeaders dittoHeaders) {
+    public Route buildThingsSseRoute(final RequestContext ctx, final DittoHeaders dittoHeaders,
+            final Function<Route, Route> inner) {
         return rawPathPrefix(mergeDoubleSlashes().concat(PATH_THINGS), () ->
                 pathEndOrSingleSlash(() ->
                         get(() ->
                                 headerValuePF(AcceptHeaderExtractor.INSTANCE, accept ->
-                                        parameterOptional(ThingsParameter.FIELDS.toString(), fieldsString ->
+                                        inner.apply(parameterOptional(ThingsParameter.FIELDS.toString(), fieldsString ->
                                                 parameterOptional(ThingsParameter.IDS.toString(),
                                                         idsString -> // "ids" is optional for SSE
                                                                 createSseRoute(dittoHeaders,
                                                                         calculateSelectedFields(fieldsString).orElse(
                                                                                 null),
-                                                                        idsString.map(ids -> ids.split(",")))
-                                                )
+                                                                        idsString.map(ids -> ids.split(","))
+                                                                )
+                                                ))
                                         )
+
                                 )
                         )
                 )

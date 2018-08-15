@@ -41,7 +41,7 @@ Create a new connection by sending the following DevOps command:
 ```
 
 The content of the connection configuration object is specified in the [Connections section](basic-connections.html).
-For protocol specific examples follow the description for the [AMQP-0.9.1 binding](connectivity-protocol-bindings-amqp091.html) or
+For protocol specific examples consolidate the [AMQP-0.9.1 binding](connectivity-protocol-bindings-amqp091.html) and
 the [AMQP-1.0 binding](connectivity-protocol-bindings-amqp10.html) respectively.
 
 ### Modify connection
@@ -72,6 +72,36 @@ The only parameter necessary for connection retrieval is the `connectionId`:
     "headers": {},
     "piggybackCommand": {
         "type": "connectivity.commands:retrieveConnection",
+        "connectionId":"<connectionID>"
+    }
+}
+```
+
+### Open connection
+
+The only parameter necessary for opening a connection is the `connectionId`:
+
+```json
+{
+    "targetActorSelection": "/system/sharding/connection",
+    "headers": {},
+    "piggybackCommand": {
+        "type": "connectivity.commands:openConnection",
+        "connectionId":"<connectionID>"
+    }
+}
+```
+
+### Close connection
+
+The only parameter necessary for closing a connection is the `connectionId`:
+
+```json
+{
+    "targetActorSelection": "/system/sharding/connection",
+    "headers": {},
+    "piggybackCommand": {
+        "type": "connectivity.commands:closeConnection",
         "connectionId":"<connectionID>"
     }
 }

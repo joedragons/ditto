@@ -11,7 +11,7 @@
  */
 package org.eclipse.ditto.services.connectivity.messaging;
 
-import static org.eclipse.ditto.services.connectivity.messaging.FaultyConnectionActor.faultyConnectionActorPropsFactory;
+import static org.eclipse.ditto.services.connectivity.messaging.FaultyClientActor.faultyClientActorPropsFactory;
 
 import java.util.concurrent.TimeUnit;
 
@@ -59,22 +59,19 @@ public class ErrorHandlingActorTest {
     }
 
     @Test
-    public void tryCreateConnectionExpectErrorResponse() {
+    public void tryCreateConnectionExpectSuccessResponseIndependentOfConnectionStatus() {
         new TestKit(actorSystem) {{
             final String connectionId = TestConstants.createRandomConnectionId();
             final Connection connection = TestConstants.createConnection(connectionId, actorSystem);
             final ActorRef underTest = TestConstants.createConnectionSupervisorActor(connectionId, actorSystem,
                     pubSubMediator, conciergeForwarder,
-                    (connection1, conciergeForwarder) -> FaultyConnectionActor.props(false));
+                    (connection1, conciergeForwarder) -> FaultyClientActor.props(false));
             watch(underTest);
 
             // create connection
             final ConnectivityModifyCommand command = CreateConnection.of(connection, DittoHeaders.empty());
             underTest.tell(command, getRef());
-            expectMsg(ConnectionFailedException
-                    .newBuilder(connectionId)
-                    .description("error message")
-                    .build());
+            expectMsg(CreateConnectionResponse.of(connection, DittoHeaders.empty()));
         }};
     }
 
@@ -95,7 +92,7 @@ public class ErrorHandlingActorTest {
             final Connection connection = TestConstants.createConnection(connectionId, actorSystem);
             final ActorRef underTest =
                     TestConstants.createConnectionSupervisorActor(connectionId, actorSystem, pubSubMediator,
-                            conciergeForwarder, faultyConnectionActorPropsFactory);
+                            conciergeForwarder, faultyClientActorPropsFactory);
             watch(underTest);
 
             // create connection
@@ -118,7 +115,7 @@ public class ErrorHandlingActorTest {
             final Connection connection = TestConstants.createConnection(connectionId, actorSystem);
             final ActorRef underTest =
                     TestConstants.createConnectionSupervisorActor(connectionId, actorSystem, pubSubMediator,
-                            conciergeForwarder, faultyConnectionActorPropsFactory);
+                            conciergeForwarder, faultyClientActorPropsFactory);
             watch(underTest);
 
             // create connection
