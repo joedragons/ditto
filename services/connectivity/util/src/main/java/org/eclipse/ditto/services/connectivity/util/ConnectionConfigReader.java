@@ -65,11 +65,6 @@ public final class ConnectionConfigReader extends AbstractConfigReader {
                 .orElseGet(() -> Duration.ofSeconds(5L));
     }
 
-    public Duration clientActorAskTimeout() {
-        return getIfPresent("client-actor-ask-timeout", config::getDuration)
-                .orElseGet(() -> Duration.ofSeconds(60L));
-    }
-
     /**
      * Config specific to the protocol MQTT.
      *

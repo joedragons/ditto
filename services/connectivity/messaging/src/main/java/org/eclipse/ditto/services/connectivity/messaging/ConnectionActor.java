@@ -128,6 +128,8 @@ public final class ConnectionActor extends AbstractPersistentActor {
     private static final String UNRESOLVED_PLACEHOLDERS_MESSAGE =
             "Failed to substitute all placeholders in '{}', target is dropped.";
 
+    private static final long DEFAULT_TIMEOUT_MS = 5000;
+
     private static final String PUB_SUB_GROUP_PREFIX = "connection:";
 
     /**
@@ -165,7 +167,6 @@ public final class ConnectionActor extends AbstractPersistentActor {
     private Set<Topic> uniqueTopics = Collections.emptySet();
 
     private final FiniteDuration flushPendingResponsesTimeout;
-    private final java.time.Duration clientActorAskTimeout;
     @Nullable private Cancellable stopSelfIfDeletedTrigger;
 
     private ConnectionActor(final String connectionId,
@@ -195,9 +196,6 @@ public final class ConnectionActor extends AbstractPersistentActor {
 
         final java.time.Duration javaFlushTimeout = configReader.flushPendingResponsesTimeout();
         flushPendingResponsesTimeout = Duration.create(javaFlushTimeout.toMillis(), TimeUnit.MILLISECONDS);
-        clientActorAskTimeout = configReader.clientActorAskTimeout();
-
-        LogUtil.enhanceLogWithCustomField(log, BaseClientData.MDC_CONNECTION_ID, connectionId);
     }
 
     /**
@@ -650,15 +648,14 @@ public final class ConnectionActor extends AbstractPersistentActor {
             final Consumer<Throwable> onError) {
 
         startClientActorIfRequired();
-        // timeout before sending the (partial) response
-        final long responseTimeout = Optional.ofNullable(cmd.getDittoHeaders().get("timeout"))
+        final long timeout = Optional.ofNullable(cmd.getDittoHeaders().get("timeout"))
                 .map(Long::parseLong)
-                .orElse(clientActorAskTimeout.toMillis());
+                .orElse(DEFAULT_TIMEOUT_MS);
         // wrap in Broadcast message because these management messages must be delivered to each client actor
         if (clientActorRouter != null && connection != null) {
             final ActorRef aggregationActor = getContext().actorOf(
-                    AggregateActor.props(connectionId, clientActorRouter, connection.getClientCount(), responseTimeout));
-            PatternsCS.ask(aggregationActor, cmd, clientActorAskTimeout.toMillis())
+                    AggregateActor.props(connectionId, clientActorRouter, connection.getClientCount(), timeout));
+            PatternsCS.ask(aggregationActor, cmd, timeout)
                     .whenComplete((response, exception) -> {
                         log.debug("Got response to {}: {}", cmd.getType(),
                                 exception == null ? response : exception);
