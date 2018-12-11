@@ -10,10 +10,9 @@
  */
 package org.eclipse.ditto.model.query.things;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import java.util.function.Predicate;
 
+import org.assertj.core.api.Assertions;
 import org.eclipse.ditto.json.JsonPointer;
 import org.eclipse.ditto.json.JsonValue;
 import org.eclipse.ditto.model.base.headers.DittoHeaders;
@@ -27,9 +26,9 @@ import org.eclipse.ditto.model.things.Thing;
 import org.junit.Test;
 
 /**
- * Unit test for {@link ThingPredicateVisitor}.
+ * Tests {@link ThingPredicateVisitor}.
  */
-public final class ThingPredicateVisitorTest {
+public class ThingPredicateVisitorTest {
 
     private static final CriteriaFactory criteriaFactory = new CriteriaFactoryImpl();
     private static final ThingsFieldExpressionFactory fieldExpressionFactory =
@@ -111,11 +110,8 @@ public final class ThingPredicateVisitorTest {
         return ThingPredicateVisitor.apply(createCriteria(filter));
     }
 
-    private static void testPredicate(final Thing nonMatchingThing,
-            final String predicate,
-            final String target,
+    private static void testPredicate(final Thing nonMatchingThing, final String predicate, final String target,
             final Object value) {
-
         testPredicate(nonMatchingThing, predicate, target, value.toString(), true, false);
     }
 
@@ -134,24 +130,20 @@ public final class ThingPredicateVisitorTest {
         testPredicate(nonMatchingThing, predicate, target, value, false, true);
     }
 
-    private static void testPredicate(final Thing nonMatchingThing,
-            final String predicate,
-            final String target,
-            final String value,
-            final boolean expected,
-            final boolean escapeStr) {
-
+    private static void testPredicate(final Thing nonMatchingThing, final String predicate, final String target,
+            final String value, final boolean expected, final boolean escapeStr) {
         final String stringValue = escapeStr ? "\"" + value + "\"" : value;
         final String filter = predicate + "(" + target + "," + stringValue + ")";
         final Predicate<Thing> thingPredicate = createPredicate(filter);
 
-        assertThat(thingPredicate.test(MATCHING_THING))
-                .as("Filtering '%s' with value '%s' should be %s", filter, stringValue, expected)
+        Assertions.assertThat(thingPredicate.test(MATCHING_THING))
+                .as("Filtering '" + filter + "' with value '" + stringValue + "' should be " +
+                        expected)
                 .isEqualTo(expected);
 
         if (nonMatchingThing != null) {
-            assertThat(thingPredicate.test(nonMatchingThing))
-                    .as("Filtering '%s' with value '%s' should be %s", filter, stringValue, false)
+            Assertions.assertThat(thingPredicate.test(nonMatchingThing))
+                    .as("Filtering '" + filter + "' with value '" + stringValue + "' should be " + false)
                     .isFalse();
         }
     }
@@ -364,7 +356,7 @@ public final class ThingPredicateVisitorTest {
     @Test
     public void testFilterThingIdExists() {
         final Predicate<Thing> thingPredicate = createPredicate("exists(thingId)");
-        assertThat(thingPredicate.test(MATCHING_THING))
+        Assertions.assertThat(thingPredicate.test(MATCHING_THING))
                 .as("Filtering 'exists(thingId)' should be true")
                 .isEqualTo(true);
     }
@@ -372,12 +364,12 @@ public final class ThingPredicateVisitorTest {
     @Test
     public void testFilterAttributeExists() {
         final Predicate<Thing> thingPredicate = createPredicate("exists(attributes/aBoolean)");
-        assertThat(thingPredicate.test(MATCHING_THING))
+        Assertions.assertThat(thingPredicate.test(MATCHING_THING))
                 .as("Filtering 'exists(attributes/aBoolean)' should be true")
                 .isEqualTo(true);
 
         final Predicate<Thing> negativePredicate = createPredicate("exists(attributes/missing)");
-        assertThat(negativePredicate.test(MATCHING_THING))
+        Assertions.assertThat(negativePredicate.test(MATCHING_THING))
                 .as("Filtering 'exists(attributes/missing)' should be false")
                 .isEqualTo(false);
     }
@@ -385,12 +377,12 @@ public final class ThingPredicateVisitorTest {
     @Test
     public void testFilterFeatureExists() {
         final Predicate<Thing> thingPredicate = createPredicate("exists(features/foo)");
-        assertThat(thingPredicate.test(MATCHING_THING))
+        Assertions.assertThat(thingPredicate.test(MATCHING_THING))
                 .as("Filtering 'exists(features/foo)' should be true")
                 .isEqualTo(true);
 
         final Predicate<Thing> negativePredicate = createPredicate("exists(features/bar)");
-        assertThat(negativePredicate.test(MATCHING_THING))
+        Assertions.assertThat(negativePredicate.test(MATCHING_THING))
                 .as("Filtering 'exists(features/bar)' should be false")
                 .isEqualTo(false);
     }
@@ -398,12 +390,12 @@ public final class ThingPredicateVisitorTest {
     @Test
     public void testFilterFeaturePropertyExists() {
         final Predicate<Thing> thingPredicate = createPredicate("exists(features/foo/properties/aString)");
-        assertThat(thingPredicate.test(MATCHING_THING))
+        Assertions.assertThat(thingPredicate.test(MATCHING_THING))
                 .as("Filtering 'exists(features/foo/properties/aString)' should be true")
                 .isEqualTo(true);
 
         final Predicate<Thing> negativePredicate = createPredicate("exists(features/foo/properties/missing)");
-        assertThat(negativePredicate.test(MATCHING_THING))
+        Assertions.assertThat(negativePredicate.test(MATCHING_THING))
                 .as("Filtering 'exists(features/foo/properties/missing)' should be false")
                 .isEqualTo(false);
     }
@@ -412,7 +404,7 @@ public final class ThingPredicateVisitorTest {
     public void testLogicalAndWith2queries() {
         final String filter = "and(exists(attributes/aBoolean),eq(thingId,\"" + MATCHING_THING_ID + "\"))";
         final Predicate<Thing> thingPredicate = createPredicate(filter);
-        assertThat(thingPredicate.test(MATCHING_THING))
+        Assertions.assertThat(thingPredicate.test(MATCHING_THING))
                 .as("Filtering '"+ filter + "' should be true")
                 .isEqualTo(true);
     }
@@ -425,7 +417,7 @@ public final class ThingPredicateVisitorTest {
                 "gt(attributes/aDouble," + (MATCHING_THING_DOUBLE-0.5) + ")" +
                 ")";
         final Predicate<Thing> thingPredicate = createPredicate(filter);
-        assertThat(thingPredicate.test(MATCHING_THING))
+        Assertions.assertThat(thingPredicate.test(MATCHING_THING))
                 .as("Filtering '"+ filter + "' should be true")
                 .isEqualTo(true);
     }
@@ -434,7 +426,7 @@ public final class ThingPredicateVisitorTest {
     public void testLogicalOrWith2queries() {
         final String filter = "or(exists(attributes/missing),eq(thingId,\"" + MATCHING_THING_ID + "\"))";
         final Predicate<Thing> thingPredicate = createPredicate(filter);
-        assertThat(thingPredicate.test(MATCHING_THING))
+        Assertions.assertThat(thingPredicate.test(MATCHING_THING))
                 .as("Filtering '"+ filter + "' should be true")
                 .isEqualTo(true);
     }
@@ -447,7 +439,7 @@ public final class ThingPredicateVisitorTest {
                 "gt(attributes/aDouble," + (MATCHING_THING_DOUBLE-0.5) + ")" +
                 ")";
         final Predicate<Thing> thingPredicate = createPredicate(filter);
-        assertThat(thingPredicate.test(MATCHING_THING))
+        Assertions.assertThat(thingPredicate.test(MATCHING_THING))
                 .as("Filtering '"+ filter + "' should be true")
                 .isEqualTo(true);
     }
@@ -456,13 +448,13 @@ public final class ThingPredicateVisitorTest {
     public void testLogicalNotWithEqThingId() {
         final String filter = "not(eq(thingId,\"" + MATCHING_THING_ID + "\"))";
         final Predicate<Thing> thingPredicate = createPredicate(filter);
-        assertThat(thingPredicate.test(MATCHING_THING))
+        Assertions.assertThat(thingPredicate.test(MATCHING_THING))
                 .as("Filtering '"+ filter + "' should be false")
                 .isEqualTo(false);
 
         final String negativeFilter = "not(eq(thingId,\"" + MATCHING_THING_ID + "-missing" + "\"))";
         final Predicate<Thing> negativePredicate = createPredicate(negativeFilter);
-        assertThat(negativePredicate.test(MATCHING_THING))
+        Assertions.assertThat(negativePredicate.test(MATCHING_THING))
                 .as("Filtering '"+ filter + "' should be true")
                 .isEqualTo(true);
     }

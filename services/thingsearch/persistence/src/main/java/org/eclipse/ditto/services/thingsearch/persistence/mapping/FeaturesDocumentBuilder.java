@@ -14,7 +14,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.bson.Document;
-import org.eclipse.ditto.json.JsonNumber;
 import org.eclipse.ditto.json.JsonValue;
 import org.eclipse.ditto.model.things.Features;
 import org.eclipse.ditto.services.thingsearch.common.util.KeyEscapeUtil;
@@ -78,14 +77,13 @@ final class FeaturesDocumentBuilder {
 
     private FeaturesDocumentBuilder mainFeatureProperties(final String key, final Object value,
             final String featureId) {
-
         final Document doc = (Document) tDocument.get(PersistenceConstants.FIELD_FEATURES);
         final Document featurePropertiesDoc = getSubDocument(doc, featureId);
         featurePropertiesDoc.append(KeyEscapeUtil.escape(key), value);
         return this;
     }
 
-    private static Document getSubDocument(final Document doc, final String featureId) {
+    private Document getSubDocument(final Document doc, final String featureId) {
         final String featureKey = KeyEscapeUtil.escape(featureId);
         if (doc.get(featureId) == null) {
             doc.put(featureKey, newFeaturePropertiesDocument());
@@ -93,7 +91,7 @@ final class FeaturesDocumentBuilder {
         return (Document) ((Document) doc.get(featureKey)).get(PersistenceConstants.FIELD_PROPERTIES);
     }
 
-    private static Document newFeaturePropertiesDocument() {
+    private Document newFeaturePropertiesDocument() {
         return new Document(PersistenceConstants.FIELD_PROPERTIES, ThingDocumentMapper.newDocument());
     }
 
@@ -114,11 +112,10 @@ final class FeaturesDocumentBuilder {
     }
 
     private void addNumberFeature(final String path, final JsonValue jsonValue, final String featureId) {
-        final JsonNumber jsonNumber = (JsonNumber) jsonValue;
-        if (jsonNumber.isLong()) {
-            featureInternally(path, jsonNumber.asLong(), featureId);
-        } else {
-            featureInternally(path, jsonNumber.asDouble(), featureId);
+        try {
+            featureInternally(path, jsonValue.asLong(), featureId);
+        } catch (final NumberFormatException e) {
+            featureInternally(path, jsonValue.asDouble(), featureId);
         }
     }
 

@@ -23,26 +23,24 @@ import javax.annotation.concurrent.Immutable;
  * An immutable implementation of the NULL literal as JsonObject.
  */
 @Immutable
-final class ImmutableJsonObjectNull extends AbstractJsonValue implements JsonObject, JsonNull {
-
-    @Nullable private static ImmutableJsonObjectNull instance = null;
+final class ImmutableJsonObjectNull extends AbstractImmutableJsonValue implements JsonObject, JsonNull {
 
     private ImmutableJsonObjectNull() {
         super();
     }
 
     /**
-     * Returns an instance of {@code ImmutableJsonObjectNull}.
+     * Creates a new {@code ImmutableJsonObjectNull} object.
      *
-     * @return the instance.
+     * @return a new ImmutableJsonObjectNull object.
      */
-    public static ImmutableJsonObjectNull getInstance() {
-        ImmutableJsonObjectNull result = instance;
-        if (null == result) {
-            result = new ImmutableJsonObjectNull();
-            instance = result;
-        }
-        return result;
+    public static ImmutableJsonObjectNull newInstance() {
+        return new ImmutableJsonObjectNull();
+    }
+
+    @Override
+    protected String createStringRepresentation() {
+        return JsonFactory.nullLiteral().toString();
     }
 
     @Override
@@ -183,11 +181,6 @@ final class ImmutableJsonObjectNull extends AbstractJsonValue implements JsonObj
     @Override
     public int hashCode() {
         return JsonNull.class.hashCode();
-    }
-
-    @Override
-    public String toString() {
-        return JsonFactory.nullLiteral().toString();
     }
 
 }

@@ -14,36 +14,28 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
- * An immutable JsonValue that wraps JSON NULL.
- * Calling {@link #asObject()} or {@link #asArray()} returns a JSON NULL representation as an instance of JsonObject,
- * respectively JsonArray.
- * This is different than the JSON literals because JSON NULL is a valid value for a JSON field were expected is an
- * JSON object or JSON array.
+ * An immutable JsonValue that wraps JSON NULL. Calling asObject() or asArray() returns a JSON NULL representation as an
+ * instance of JsonObject, respectively JsonArray. This is different than the JSON literals because JSON NULL is a valid
+ * value for a JSON field were expected is an JSON object or JSON array.
  */
 @Immutable
-final class ImmutableJsonNull extends AbstractJsonValue implements JsonNull {
-
-    private static final ImmutableJsonNull INSTANCE = new ImmutableJsonNull();
+final class ImmutableJsonNull extends AbstractMinimalJsonValueWrapper implements JsonNull {
 
     /**
      * Constructs a new {@code AbstractMinimalJsonValueWrapper} object.
      */
     private ImmutableJsonNull() {
-        super();
+        super(com.eclipsesource.json.Json.NULL);
     }
 
     /**
-     * Returns an instance of {@code ImmutableJsonNull}.
+     * Returns a new instance of {@code ImmutableJsonNull}.
      *
-     * @return the instance.
+     * @return a new ImmutableJsonNull.
+     * @throws NullPointerException if {@code minimalJsonValue} is {@code null}.
      */
-    public static ImmutableJsonNull getInstance() {
-        return INSTANCE;
-    }
-
-    @Override
-    public boolean isNull() {
-        return true;
+    public static JsonValue newInstance() {
+        return new ImmutableJsonNull();
     }
 
     @Override
@@ -74,11 +66,6 @@ final class ImmutableJsonNull extends AbstractJsonValue implements JsonNull {
     @Override
     public int hashCode() {
         return JsonNull.class.hashCode();
-    }
-
-    @Override
-    public String toString() {
-        return "null";
     }
 
 }

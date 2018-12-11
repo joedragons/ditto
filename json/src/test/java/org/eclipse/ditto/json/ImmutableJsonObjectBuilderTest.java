@@ -12,6 +12,7 @@ package org.eclipse.ditto.json;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.eclipse.ditto.json.JsonFactory.newField;
 import static org.eclipse.ditto.json.assertions.DittoJsonAssertions.assertThat;
 
 import java.util.ArrayList;
@@ -154,9 +155,9 @@ public final class ImmutableJsonObjectBuilderTest {
 
     @Test
     public void doSetFieldIfPredicateEvaluatesToTrue() {
-        final JsonField bazField = JsonFactory.newField(bazKey, eddard.getValue());
-        final JsonField barField = JsonFactory.newField(barKey, JsonFactory.newObject().set(bazField));
-        final JsonField expectedField = JsonFactory.newField(fooKey, JsonFactory.newObject().set(barField));
+        final JsonField bazField = newField(bazKey, eddard.getValue());
+        final JsonField barField = newField(barKey, JsonFactory.newObject().set(bazField));
+        final JsonField expectedField = newField(fooKey, JsonFactory.newObject().set(barField));
 
         underTest.set(pointer, eddard.getValue(), jsonValue -> true);
 
@@ -407,9 +408,8 @@ public final class ImmutableJsonObjectBuilderTest {
     }
 
     private static Predicate<JsonField> hasFieldDefinition(final JsonFieldDefinition definition) {
-        return field -> field.getDefinition()
-                .filter(definition::equals)
-                .isPresent();
+        return field -> field.getDefinition().map(jsonFieldDefinition ->
+                jsonFieldDefinition.equals(definition)).orElse(false);
     }
 
     private static final class Marker implements JsonFieldMarker, Predicate<JsonField> {

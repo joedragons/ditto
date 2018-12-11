@@ -10,17 +10,16 @@
  */
 package org.eclipse.ditto.json;
 
-import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.eclipse.ditto.json.assertions.DittoJsonAssertions.assertThat;
-import static org.mutabilitydetector.unittesting.AllowedReason.assumingFields;
 import static org.mutabilitydetector.unittesting.MutabilityAssert.assertInstancesOf;
 import static org.mutabilitydetector.unittesting.MutabilityMatchers.areImmutable;
 
+import java.lang.ref.SoftReference;
+
 import org.junit.Test;
 
-import com.eclipsesource.json.Json;
-
 import nl.jqno.equalsverifier.EqualsVerifier;
+import nl.jqno.equalsverifier.Warning;
 
 /**
  * Unit test for {@link ImmutableJsonString}.
@@ -28,34 +27,41 @@ import nl.jqno.equalsverifier.EqualsVerifier;
 public final class ImmutableJsonStringTest {
 
     private static final String KNOWN_STRING_VALUE = "foo";
+    private static final com.eclipsesource.json.JsonValue KNOWN_JSON_STRING =
+            com.eclipsesource.json.Json.value(KNOWN_STRING_VALUE);
 
     @Test
     public void assertImmutability() {
-        assertInstancesOf(ImmutableJsonString.class,
-                areImmutable(),
-                assumingFields("stringRepresentation").areModifiedAsPartOfAnUnobservableCachingStrategy());
+        assertInstancesOf(ImmutableJsonString.class, areImmutable());
     }
 
     @Test
     public void testHashCodeAndEquals() {
-        EqualsVerifier.forClass(ImmutableJsonString.class)
-                .usingGetClass()
-                .withRedefinedSuperclass()
-                .withIgnoredFields("stringRepresentation")
+        final SoftReference<JsonValue> red = new SoftReference<>(JsonFactory.newValue("red"));
+        final SoftReference<JsonValue> black = new SoftReference<>(JsonFactory.newValue("black"));
+
+        EqualsVerifier.forClass(ImmutableJsonString.class) //
+                .withIgnoredFields("stringRepresentation") //
+                .withRedefinedSuperclass() //
+                .withPrefabValues(SoftReference.class, red, black) //
+                .suppress(Warning.REFERENCE_EQUALITY) //
                 .verify();
     }
 
-    @Test
+    @Test(expected = NullPointerException.class)
     public void tryToCreateInstanceFromNullValue() {
-        assertThatNullPointerException()
-                .isThrownBy(() -> ImmutableJsonString.of(null))
-                .withMessage("The string value must not be null!")
-                .withNoCause();
+        ImmutableJsonString.of(null);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void tryToCreateInstanceFromNonStringValue() {
+        final com.eclipsesource.json.JsonValue booleanJsonValue = com.eclipsesource.json.Json.value(false);
+        ImmutableJsonString.of(booleanJsonValue);
     }
 
     @Test
     public void immutableJsonStringIsNothingElse() {
-        final ImmutableJsonString underTest = ImmutableJsonString.of(KNOWN_STRING_VALUE);
+        final ImmutableJsonString underTest = ImmutableJsonString.of(KNOWN_JSON_STRING);
 
         assertThat(underTest).isString();
         assertThat(underTest).isNotNullLiteral();
@@ -74,14 +80,14 @@ public final class ImmutableJsonStringTest {
     @Test
     public void toStringReturnsExpected() {
         final String expected = "\"" + KNOWN_STRING_VALUE + "\"";
-        final com.eclipsesource.json.JsonValue underTest = Json.value(KNOWN_STRING_VALUE);
+        final ImmutableJsonString underTest = ImmutableJsonString.of(KNOWN_JSON_STRING);
 
         assertThat(underTest.toString()).isEqualTo(expected);
     }
 
     @Test
     public void asStringReturnsExpected() {
-        final ImmutableJsonString underTest = ImmutableJsonString.of(KNOWN_STRING_VALUE);
+        final ImmutableJsonString underTest = ImmutableJsonString.of(KNOWN_JSON_STRING);
 
         assertThat(underTest.asString()).isEqualTo(KNOWN_STRING_VALUE);
     }

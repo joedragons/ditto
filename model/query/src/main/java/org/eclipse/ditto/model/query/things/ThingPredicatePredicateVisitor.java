@@ -17,7 +17,6 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
-import org.eclipse.ditto.json.JsonNumber;
 import org.eclipse.ditto.json.JsonValue;
 import org.eclipse.ditto.model.query.criteria.visitors.PredicateVisitor;
 import org.eclipse.ditto.model.things.Thing;
@@ -34,7 +33,7 @@ public final class ThingPredicatePredicateVisitor implements PredicateVisitor<Fu
     }
 
     /**
-     * Gets the singleton instance of this {@code ThingPredicatePredicateVisitor}.
+     * Gets the singleton instance of this {@link ThingPredicatePredicateVisitor}.
      *
      * @return the singleton instance.
      */
@@ -63,7 +62,7 @@ public final class ThingPredicatePredicateVisitor implements PredicateVisitor<Fu
     public Function<String, Predicate<Thing>> visitEq(final Object value) {
         return fieldName ->
                 thing -> getThingField(fieldName, thing)
-                        .map(ThingPredicatePredicateVisitor::mapJsonValueToJava)
+                        .map(this::mapJsonValueToJava)
                         .filter(value::equals)
                         .isPresent();
     }
@@ -72,7 +71,7 @@ public final class ThingPredicatePredicateVisitor implements PredicateVisitor<Fu
     public Function<String, Predicate<Thing>> visitNe(final Object value) {
         return fieldName ->
                 thing -> !getThingField(fieldName, thing)
-                        .map(ThingPredicatePredicateVisitor::mapJsonValueToJava)
+                        .map(this::mapJsonValueToJava)
                         .filter(value::equals)
                         .isPresent();
     }
@@ -81,7 +80,7 @@ public final class ThingPredicatePredicateVisitor implements PredicateVisitor<Fu
     public Function<String, Predicate<Thing>> visitGe(final Object value) {
         return fieldName ->
                 thing -> getThingField(fieldName, thing)
-                        .map(ThingPredicatePredicateVisitor::mapJsonValueToJava)
+                        .map(this::mapJsonValueToJava)
                         .filter(obj -> obj instanceof Comparable && value instanceof Comparable)
                         .map(obj -> (Comparable) obj)
                         .filter(obj -> compare((Comparable) value, obj) >= 0)
@@ -92,7 +91,7 @@ public final class ThingPredicatePredicateVisitor implements PredicateVisitor<Fu
     public Function<String, Predicate<Thing>> visitGt(final Object value) {
         return fieldName ->
                 thing -> getThingField(fieldName, thing)
-                        .map(ThingPredicatePredicateVisitor::mapJsonValueToJava)
+                        .map(this::mapJsonValueToJava)
                         .filter(obj -> obj instanceof Comparable && value instanceof Comparable)
                         .map(obj -> (Comparable) obj)
                         .filter(obj -> compare((Comparable) value, obj) > 0)
@@ -103,7 +102,7 @@ public final class ThingPredicatePredicateVisitor implements PredicateVisitor<Fu
     public Function<String, Predicate<Thing>> visitLe(final Object value) {
         return fieldName ->
                 thing -> getThingField(fieldName, thing)
-                        .map(ThingPredicatePredicateVisitor::mapJsonValueToJava)
+                        .map(this::mapJsonValueToJava)
                         .filter(obj -> obj instanceof Comparable && value instanceof Comparable)
                         .map(obj -> (Comparable) obj)
                         .filter(obj -> compare((Comparable) value, obj) <= 0)
@@ -114,14 +113,14 @@ public final class ThingPredicatePredicateVisitor implements PredicateVisitor<Fu
     public Function<String, Predicate<Thing>> visitLt(final Object value) {
         return fieldName ->
                 thing -> getThingField(fieldName, thing)
-                        .map(ThingPredicatePredicateVisitor::mapJsonValueToJava)
+                        .map(this::mapJsonValueToJava)
                         .filter(obj -> obj instanceof Comparable && value instanceof Comparable)
                         .map(obj -> (Comparable) obj)
                         .filter(obj -> compare((Comparable) value, obj) < 0)
                         .isPresent();
     }
 
-    private static int compare(final Comparable value, final Comparable obj) {
+    private int compare(final Comparable value, final Comparable obj) {
         final Comparable comparableObj = asNumber(obj);
         final Comparable comparableValue = asNumber(value);
         // best effort try to convert both values to a BigDecimal in order to compare them:
@@ -158,7 +157,7 @@ public final class ThingPredicatePredicateVisitor implements PredicateVisitor<Fu
     public Function<String, Predicate<Thing>> visitIn(final List<?> values) {
         return fieldName ->
                 thing -> getThingField(fieldName, thing)
-                        .map(ThingPredicatePredicateVisitor::mapJsonValueToJava)
+                        .map(this::mapJsonValueToJava)
                         .filter(values::contains)
                         .isPresent();
     }
@@ -173,35 +172,34 @@ public final class ThingPredicatePredicateVisitor implements PredicateVisitor<Fu
                         .isPresent();
     }
 
-    private static Optional<JsonValue> getThingField(final CharSequence fieldName, final Thing thing) {
+    private Optional<JsonValue> getThingField(final String fieldName, final Thing thing) {
         return thing.toJson(p -> true).getValue(fieldName);
     }
 
-    private static Object mapJsonValueToJava(final JsonValue jsonValue) {
-        final Object result;
-
+    private Object mapJsonValueToJava(final JsonValue jsonValue) {
         if (jsonValue.isString()) {
-            result = jsonValue.asString();
+            return jsonValue.asString();
         } else if (jsonValue.isBoolean()) {
-            result = jsonValue.asBoolean();
+            return jsonValue.asBoolean();
         } else if (jsonValue.isNull()) {
-            result = null;
+            return null;
         } else if (jsonValue.isNumber()) {
-            final JsonNumber jsonNumber = (JsonNumber) jsonValue;
-            if (jsonNumber.isInt() || jsonNumber.isLong()) {
-                result = jsonNumber.asLong();
+            final Double doubleValue = jsonValue.asDouble();
+            if (doubleValue.intValue() == doubleValue) {
+                // normally we would use intValue here - BUT: the parser always treats numbers as Long
+                // not producing Integers at all:
+                return doubleValue.longValue();
+            } else if (doubleValue.longValue() == doubleValue) {
+                return doubleValue.longValue();
             } else {
-                result = jsonNumber.asDouble();
+                return doubleValue;
             }
         } else if (jsonValue.isArray()) {
-            result = null; // filtering arrays is not supported
+            return null; // filtering arrays is not supported
         } else if (jsonValue.isObject()) {
-            result = null; // filtering objects is not supported
+            return null; // filtering objects is not supported
         } else {
-            result = null;
+            return null;
         }
-
-        return result;
     }
-
 }

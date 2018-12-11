@@ -12,24 +12,24 @@ package org.eclipse.ditto.json;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.eclipse.ditto.json.JsonFactory.newPointer;
 import static org.eclipse.ditto.json.assertions.DittoJsonAssertions.assertThat;
 import static org.mockito.Mockito.mock;
-import static org.mutabilitydetector.unittesting.AllowedReason.provided;
+import static org.mutabilitydetector.unittesting.AllowedReason.assumingFields;
 import static org.mutabilitydetector.unittesting.MutabilityAssert.assertInstancesOf;
 import static org.mutabilitydetector.unittesting.MutabilityMatchers.areImmutable;
 
+import java.lang.ref.SoftReference;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
 
-import org.assertj.core.api.Assertions;
-import org.eclipse.ditto.json.ImmutableJsonObject.SoftReferencedFieldMap;
 import org.junit.Test;
 
 import nl.jqno.equalsverifier.EqualsVerifier;
@@ -42,19 +42,19 @@ public final class ImmutableJsonObjectTest {
 
     private static final int KNOWN_INT_23 = 23;
     private static final int KNOWN_INT_42 = 42;
-    private static final JsonKey KNOWN_KEY_FOO = JsonKey.of("foo");
-    private static final JsonKey KNOWN_KEY_BAR = JsonKey.of("bar");
-    private static final JsonKey KNOWN_KEY_BAZ = JsonKey.of("baz");
-    private static final JsonValue KNOWN_VALUE_FOO = JsonValue.of("bar");
-    private static final JsonValue KNOWN_VALUE_BAR = JsonValue.of("baz");
-    private static final JsonValue KNOWN_VALUE_BAZ = JsonValue.of(KNOWN_INT_42);
+    private static final JsonKey KNOWN_KEY_FOO = JsonFactory.newKey("foo");
+    private static final JsonKey KNOWN_KEY_BAR = JsonFactory.newKey("bar");
+    private static final JsonKey KNOWN_KEY_BAZ = JsonFactory.newKey("baz");
+    private static final JsonValue KNOWN_VALUE_FOO = JsonFactory.newValue("bar");
+    private static final JsonValue KNOWN_VALUE_BAR = JsonFactory.newValue("baz");
+    private static final JsonValue KNOWN_VALUE_BAZ = JsonFactory.newValue(KNOWN_INT_42);
     private static final Map<String, JsonField> KNOWN_FIELDS = new LinkedHashMap<>();
     private static final String KNOWN_JSON_STRING;
 
     static {
-        KNOWN_FIELDS.put(KNOWN_KEY_FOO.toString(), toField(KNOWN_KEY_FOO, KNOWN_VALUE_FOO));
-        KNOWN_FIELDS.put(KNOWN_KEY_BAR.toString(), toField(KNOWN_KEY_BAR, KNOWN_VALUE_BAR));
-        KNOWN_FIELDS.put(KNOWN_KEY_BAZ.toString(), toField(KNOWN_KEY_BAZ, KNOWN_VALUE_BAZ));
+        KNOWN_FIELDS.put(KNOWN_KEY_FOO.toString(), JsonFactory.newField(KNOWN_KEY_FOO, KNOWN_VALUE_FOO));
+        KNOWN_FIELDS.put(KNOWN_KEY_BAR.toString(), JsonFactory.newField(KNOWN_KEY_BAR, KNOWN_VALUE_BAR));
+        KNOWN_FIELDS.put(KNOWN_KEY_BAZ.toString(), JsonFactory.newField(KNOWN_KEY_BAZ, KNOWN_VALUE_BAZ));
 
         KNOWN_JSON_STRING = "{"
                 + "\"" + KNOWN_KEY_FOO + "\":\"" + KNOWN_VALUE_FOO.asString() + "\","
@@ -64,50 +64,45 @@ public final class ImmutableJsonObjectTest {
     }
 
     private static Map<String, JsonField> toMap(final CharSequence keyName, final int rawValue) {
-        return toMap(keyName, JsonValue.of(rawValue));
+        return toMap(keyName, JsonFactory.newValue(rawValue));
     }
 
     @Test
     public void assertImmutability() {
         assertInstancesOf(ImmutableJsonObject.class,
                 areImmutable(),
-                provided(SoftReferencedFieldMap.class).isAlsoImmutable());
+                assumingFields("fields").areSafelyCopiedUnmodifiableCollectionsWithImmutableElements());
     }
 
     @Test
     public void testHashCodeAndEquals() {
-        final Map<String, JsonField> jsonFieldsRed = toMap("foo", JsonValue.of(1));
-        final Map<String, JsonField> jsonFieldsBlack = toMap("foo", JsonValue.of(2));
-        final SoftReferencedFieldMap redFieldMap = SoftReferencedFieldMap.of(jsonFieldsRed);
-        final SoftReferencedFieldMap blackFieldMap = SoftReferencedFieldMap.of(jsonFieldsBlack);
-        final ImmutableJsonObject redObject = ImmutableJsonObject.of(jsonFieldsRed);
-        final ImmutableJsonObject blackObject = ImmutableJsonObject.of(jsonFieldsBlack);
+        final SoftReference<JsonObject> red = new SoftReference<>(JsonFactory.newObject("{\"foo\": 1}"));
+        final SoftReference<JsonObject> black = new SoftReference<>(JsonFactory.newObject("{\"foo\": 2}"));
 
         EqualsVerifier.forClass(ImmutableJsonObject.class)
-                .withPrefabValues(SoftReferencedFieldMap.class, redFieldMap, blackFieldMap)
-                .withPrefabValues(ImmutableJsonObject.class, redObject, blackObject)
-                .withNonnullFields("fieldMap")
+                .withIgnoredFields("stringRepresentation")
+                .withPrefabValues(SoftReference.class, red, black)
                 .verify();
     }
 
     @Test
     public void orderOfFieldsDoesNotAffectEquality() {
-        final JsonObjectBuilder barJsonObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder barJsonObjectBuilder = JsonFactory.newObjectBuilder();
         barJsonObjectBuilder.set("baz", KNOWN_INT_23);
 
-        final JsonObjectBuilder fooJsonObjectLeftBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder fooJsonObjectLeftBuilder = JsonFactory.newObjectBuilder();
         fooJsonObjectLeftBuilder.set("bar", barJsonObjectBuilder.build());
         final int intValue10 = 10;
         fooJsonObjectLeftBuilder.set("yo", intValue10);
 
-        final JsonObjectBuilder leftObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder leftObjectBuilder = JsonFactory.newObjectBuilder();
         leftObjectBuilder.set("foo", fooJsonObjectLeftBuilder.build());
 
-        final JsonObjectBuilder fooJsonObjectRightBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder fooJsonObjectRightBuilder = JsonFactory.newObjectBuilder();
         fooJsonObjectRightBuilder.set("yo", intValue10);
         fooJsonObjectRightBuilder.set("bar", barJsonObjectBuilder.build());
 
-        final JsonObjectBuilder rightObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder rightObjectBuilder = JsonFactory.newObjectBuilder();
         rightObjectBuilder.set("foo", fooJsonObjectRightBuilder.build());
 
         final JsonObject leftJsonObject = leftObjectBuilder.build();
@@ -116,19 +111,9 @@ public final class ImmutableJsonObjectTest {
         assertThat(leftJsonObject).isEqualTo(rightJsonObject);
     }
 
-    @Test
-    public void twoParsedObjectsFromSameStringHaveSameHashCode() {
-        final String jsonObjectString =
-                "{\"location\":{\"latitude\":44.673856, \"longitude\":8.261719},\"maker\":\"ACME\"}";
-        final Function<String, JsonValue> parser = JsonValueParser.fromString();
-
-        final JsonValue parsedFirst = parser.apply(jsonObjectString);
-        final JsonValue parsedSecond = parser.apply(jsonObjectString);
-
-        assertThat(parsedFirst).isInstanceOf(ImmutableJsonObject.class);
-        assertThat(parsedSecond).isInstanceOf(ImmutableJsonObject.class);
-        assertThat(parsedFirst.equals(parsedSecond)).isTrue();
-        assertThat(parsedFirst.hashCode()).isEqualTo(parsedSecond.hashCode());
+    @Test(expected = NullPointerException.class)
+    public void tryToGetInstanceFromNullJsonObject() {
+        ImmutableJsonObject.of(null);
     }
 
     @Test
@@ -180,16 +165,16 @@ public final class ImmutableJsonObjectTest {
     @Test
     public void getReturnsExpected() {
         final JsonObject underTest = ImmutableJsonObject.of(KNOWN_FIELDS);
-        final JsonKey key = JsonKey.of("foo");
-        final JsonValue expectedValue = JsonValue.of("bar");
+        final JsonKey key = JsonFactory.newKey("foo");
+        final JsonValue expectedValue = JsonFactory.newValue("bar");
 
         assertThat(underTest).contains(key, expectedValue);
     }
 
     @Test
     public void setWorksAsExpected() {
-        final JsonKey key = JsonKey.of("key");
-        final JsonValue valueToAdd = JsonValue.of("oxi");
+        final JsonKey key = JsonFactory.newKey("key");
+        final JsonValue valueToAdd = JsonFactory.newValue("oxi");
 
         final JsonObject underTest = ImmutableJsonObject.empty();
 
@@ -223,7 +208,7 @@ public final class ImmutableJsonObjectTest {
     @Test
     public void setIntCreatesDisjointJsonObject() {
         final JsonObject underTest = ImmutableJsonObject.empty();
-        final JsonKey key = JsonKey.of("key");
+        final JsonKey key = JsonFactory.newKey("key");
         final int value = KNOWN_INT_42;
         final JsonObject afterAdd = underTest.setValue(key, value);
 
@@ -240,7 +225,7 @@ public final class ImmutableJsonObjectTest {
     public void setExistingIntReturnsSameInstance() {
         final JsonKey key = KNOWN_KEY_FOO;
         final int value = KNOWN_INT_23;
-        final ImmutableJsonObject underTest = ImmutableJsonObject.of(toMap(key, JsonValue.of(value)));
+        final ImmutableJsonObject underTest = ImmutableJsonObject.of(toMap(key, JsonFactory.newValue(value)));
 
         final JsonObject jsonObject = underTest.setValue(key, value);
 
@@ -250,7 +235,7 @@ public final class ImmutableJsonObjectTest {
     @Test
     public void setIntWithKeyContainingSlashes() {
         final CharSequence key = "foo/bar/baz";
-        final JsonKey jsonKey = JsonKey.of(key);
+        final JsonKey jsonKey = JsonFactory.newKey(key);
         final ImmutableJsonObject underTest = ImmutableJsonObject.empty();
 
         final JsonObject jsonObjectWithIntValue = underTest.setValue(key, KNOWN_INT_42);
@@ -260,7 +245,7 @@ public final class ImmutableJsonObjectTest {
 
     @Test
     public void setFieldTwiceReturnsSameInstance() {
-        final JsonKey jsonKey = JsonKey.of("foo/bar/baz");
+        final JsonKey jsonKey = JsonFactory.newKey("foo/bar/baz");
         final ImmutableJsonObject underTest = ImmutableJsonObject.empty();
 
         final JsonObject jsonObjectWithIntValue1 = underTest.setValue(jsonKey, KNOWN_INT_42);
@@ -272,9 +257,9 @@ public final class ImmutableJsonObjectTest {
     }
 
     @Test
-    public void setLongCreatesDisjointJsonObject() {
+    public void setLongCreatesDisjunctJsonObject() {
         final JsonObject underTest = ImmutableJsonObject.empty();
-        final JsonKey key = JsonKey.of("key");
+        final JsonKey key = JsonFactory.newKey("key");
         final long value = Long.MAX_VALUE;
         final JsonObject afterAdd = underTest.setValue(key, value);
 
@@ -288,9 +273,9 @@ public final class ImmutableJsonObjectTest {
     }
 
     @Test
-    public void setDoubleCreatesDisjointJsonObject() {
+    public void setDoubleCreatesDisjunctJsonObject() {
         final JsonObject underTest = ImmutableJsonObject.empty();
-        final JsonKey key = JsonKey.of("key");
+        final JsonKey key = JsonFactory.newKey("key");
         final double value = Double.MAX_VALUE;
         final JsonObject afterAdd = underTest.setValue(key, value);
 
@@ -304,9 +289,9 @@ public final class ImmutableJsonObjectTest {
     }
 
     @Test
-    public void setBooleanCreatesDisjointJsonObject() {
+    public void setBooleanCreatesDisjunctJsonObject() {
         final JsonObject underTest = ImmutableJsonObject.empty();
-        final JsonKey key = JsonKey.of("key");
+        final JsonKey key = JsonFactory.newKey("key");
         final boolean value = false;
         final JsonObject afterAdd = underTest.setValue(key, value);
 
@@ -320,9 +305,9 @@ public final class ImmutableJsonObjectTest {
     }
 
     @Test
-    public void setStringCreatesDisjoint() {
+    public void setStringCreatesDisjunctJsonObject() {
         final JsonObject underTest = ImmutableJsonObject.empty();
-        final JsonKey key = JsonKey.of("key");
+        final JsonKey key = JsonFactory.newKey("key");
         final String value = "black out";
         final JsonObject afterAdd = underTest.setValue(key, value);
 
@@ -346,7 +331,7 @@ public final class ImmutableJsonObjectTest {
         final ImmutableJsonObject underTest = ImmutableJsonObject.empty();
 
         assertThatExceptionOfType(IllegalArgumentException.class)
-                .isThrownBy(() -> underTest.setValue(JsonPointer.empty(), KNOWN_INT_42))
+                .isThrownBy(() -> underTest.setValue(JsonFactory.emptyPointer(), KNOWN_INT_42))
                 .withMessage("The key or pointer must not be empty!")
                 .withNoCause();
     }
@@ -364,7 +349,7 @@ public final class ImmutableJsonObjectTest {
 
     @Test
     public void setValueWithSlashJsonKeyWorksAsExpected() {
-        final JsonKey jsonKey = JsonKey.of("/");
+        final JsonKey jsonKey = JsonFactory.newKey("/");
         final JsonValue value = KNOWN_VALUE_BAR;
         final ImmutableJsonObject underTest = ImmutableJsonObject.empty();
 
@@ -376,8 +361,8 @@ public final class ImmutableJsonObjectTest {
     @Test
     public void setValueWithJsonPointerToEmptyJsonObject() {
         final JsonObject underTest = ImmutableJsonObject.empty();
-        final JsonPointer jsonPointer = JsonPointer.of("foo/bar/baz");
-        final JsonValue valueToAdd = JsonValue.of(KNOWN_INT_23);
+        final JsonPointer jsonPointer = newPointer("foo/bar/baz");
+        final JsonValue valueToAdd = JsonFactory.newValue(KNOWN_INT_23);
         final JsonObject actual = underTest.setValue(jsonPointer, valueToAdd);
 
         /*
@@ -391,13 +376,13 @@ public final class ImmutableJsonObjectTest {
          *    }
          * }
          */
-        final JsonObjectBuilder bazJsonObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder bazJsonObjectBuilder = JsonFactory.newObjectBuilder();
         bazJsonObjectBuilder.set("baz", valueToAdd);
 
-        final JsonObjectBuilder barJsonObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder barJsonObjectBuilder = JsonFactory.newObjectBuilder();
         barJsonObjectBuilder.set("bar", bazJsonObjectBuilder.build());
 
-        final JsonObjectBuilder fooJsonObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder fooJsonObjectBuilder = JsonFactory.newObjectBuilder();
         fooJsonObjectBuilder.set("foo", barJsonObjectBuilder.build());
 
         final JsonObject expected = fooJsonObjectBuilder.build();
@@ -423,15 +408,15 @@ public final class ImmutableJsonObjectTest {
         final JsonObject bazJsonObject = ImmutableJsonObject.of(toMap("baz", KNOWN_INT_23));
 
         final int intValue10 = 10;
-        final JsonObject barJsonObject = JsonObject.newBuilder()
+        final JsonObject barJsonObject = JsonFactory.newObjectBuilder()
                 .set("bar", bazJsonObject)
                 .set("yo", intValue10)
                 .build();
 
         final JsonObject underTest = ImmutableJsonObject.of(toMap("foo", barJsonObject));
 
-        final JsonPointer jsonPointer = JsonPointer.of("foo/bar/allYourBase");
-        final JsonValue valueToAdd = JsonValue.of("are belong to us!");
+        final JsonPointer jsonPointer = newPointer("foo/bar/allYourBase");
+        final JsonValue valueToAdd = JsonFactory.newValue("are belong to us!");
         final JsonObject actual = underTest.setValue(jsonPointer, valueToAdd);
 
         /*
@@ -447,15 +432,15 @@ public final class ImmutableJsonObjectTest {
          *    }
          * }
          */
-        final JsonObjectBuilder bazJsonObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder bazJsonObjectBuilder = JsonFactory.newObjectBuilder();
         bazJsonObjectBuilder.set("baz", KNOWN_INT_23);
         bazJsonObjectBuilder.set("allYourBase", valueToAdd);
 
-        final JsonObjectBuilder barJsonObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder barJsonObjectBuilder = JsonFactory.newObjectBuilder();
         barJsonObjectBuilder.set("bar", bazJsonObjectBuilder.build());
         barJsonObjectBuilder.set("yo", intValue10);
 
-        final JsonObjectBuilder fooJsonObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder fooJsonObjectBuilder = JsonFactory.newObjectBuilder();
         fooJsonObjectBuilder.set("foo", barJsonObjectBuilder.build());
 
         final JsonObject expected = fooJsonObjectBuilder.build();
@@ -480,9 +465,9 @@ public final class ImmutableJsonObjectTest {
     @Test
     public void setAllJsonFieldsWorksAsExpected() {
         final Collection<JsonField> jsonFieldsToAdd = new ArrayList<>();
-        jsonFieldsToAdd.add(toField(KNOWN_KEY_FOO, KNOWN_VALUE_FOO));
-        jsonFieldsToAdd.add(toField(KNOWN_KEY_BAR, KNOWN_VALUE_BAR));
-        jsonFieldsToAdd.add(toField(KNOWN_KEY_BAZ, KNOWN_VALUE_BAZ));
+        jsonFieldsToAdd.add(JsonFactory.newField(KNOWN_KEY_FOO, KNOWN_VALUE_FOO));
+        jsonFieldsToAdd.add(JsonFactory.newField(KNOWN_KEY_BAR, KNOWN_VALUE_BAR));
+        jsonFieldsToAdd.add(JsonFactory.newField(KNOWN_KEY_BAZ, KNOWN_VALUE_BAZ));
 
         final JsonObject emptyJsonObject = ImmutableJsonObject.empty();
         final JsonObject underTest = emptyJsonObject.setAll(jsonFieldsToAdd);
@@ -534,9 +519,9 @@ public final class ImmutableJsonObjectTest {
 
     @Test
     public void getValueWithPointerFromJsonObjectWithJsonArrayAtSomePointerLevel() {
-        final JsonObject underTest = JsonObject.newBuilder()
+        final JsonObject underTest = JsonFactory.newObjectBuilder()
                 .set(KNOWN_KEY_FOO, KNOWN_VALUE_FOO)
-                .set(KNOWN_KEY_BAR, JsonArray.newBuilder()
+                .set(KNOWN_KEY_BAR, JsonFactory.newArrayBuilder()
                         .add(KNOWN_INT_23)
                         .add("Morty")
                         .add(KNOWN_INT_42)
@@ -567,7 +552,7 @@ public final class ImmutableJsonObjectTest {
     @Test
     public void removeNonExistingJsonFieldByKeyReturnsSameJsonObject() {
         final JsonObject underTest = ImmutableJsonObject.of(KNOWN_FIELDS);
-        final JsonObject afterRemoval = underTest.remove(JsonKey.of("schroedinger"));
+        final JsonObject afterRemoval = underTest.remove(JsonFactory.newKey("schroedinger"));
 
         assertThat(afterRemoval).isSameAs(underTest);
     }
@@ -594,21 +579,23 @@ public final class ImmutableJsonObjectTest {
     @Test
     public void removingSubAttributesWorksAsExpected() {
         final Map<String, JsonField> jsonFields = new LinkedHashMap<>();
-        jsonFields.put(KNOWN_KEY_FOO.toString(), toField(KNOWN_KEY_FOO, JsonValue.of(123)));
-        jsonFields.put(KNOWN_KEY_BAR.toString(), toField(KNOWN_KEY_BAR, JsonValue.of(true)));
-        jsonFields.put(KNOWN_KEY_BAZ.toString(), toField(KNOWN_KEY_BAZ, JsonObject.of("{\"bla\":\"blub\"}")));
-        final JsonField complex = toField("complex", JsonObject.of("{\"subToDelete\":42}"));
+        jsonFields.put(KNOWN_KEY_FOO.toString(), JsonFactory.newField(KNOWN_KEY_FOO, JsonFactory.newValue(123)));
+        jsonFields.put(KNOWN_KEY_BAR.toString(), JsonFactory.newField(KNOWN_KEY_BAR, JsonFactory.newValue(true)));
+        jsonFields.put(KNOWN_KEY_BAZ.toString(),
+                JsonFactory.newField(KNOWN_KEY_BAZ, JsonFactory.newObject("{\"bla\":\"blub\"}")));
+        final JsonField complex =
+                JsonFactory.newField(JsonFactory.newKey("complex"), JsonFactory.newObject("{\"subToDelete\":42}"));
         jsonFields.put(complex.getKeyName(), complex);
 
         final JsonObject underTest = ImmutableJsonObject.of(jsonFields);
 
-        final JsonPointer jsonPointer = JsonPointer.of("complex/subToDelete");
+        final JsonPointer jsonPointer = JsonFactory.newPointer("complex/subToDelete");
         final JsonObject afterRemoval = underTest.remove(jsonPointer);
         jsonFields.remove(complex.getKeyName());
-        jsonFields.put(complex.getKeyName(), toField(complex.getKey(), JsonObject.of("{}")));
+        jsonFields.put(complex.getKeyName(), JsonFactory.newField(complex.getKey(), JsonFactory.newObject("{}")));
 
         assertThat(afterRemoval).isNotSameAs(underTest);
-        assertThat(afterRemoval).doesNotContain(JsonKey.of("subToDelete"));
+        assertThat(afterRemoval).doesNotContain(JsonFactory.newKey("subToDelete"));
         assertThat(afterRemoval).containsExactlyElementsOf(jsonFields.values());
     }
 
@@ -627,7 +614,7 @@ public final class ImmutableJsonObjectTest {
     @Test
     public void removeEmptyJsonPointerReturnsSameInstance() {
         final JsonObject underTest = ImmutableJsonObject.empty();
-        final JsonObject returned = underTest.remove(JsonPointer.empty());
+        final JsonObject returned = underTest.remove(JsonFactory.emptyPointer());
 
         assertThat(returned).isSameAs(underTest);
     }
@@ -651,7 +638,7 @@ public final class ImmutableJsonObjectTest {
 
         final JsonObject underTest = ImmutableJsonObject.of(toMap("someObjectAttribute", attributeJsonObject));
 
-        final JsonPointer jsonPointer = JsonPointer.of("someObjectAttribute/someKey/someNestedKey");
+        final JsonPointer jsonPointer = newPointer("someObjectAttribute/someKey/someNestedKey");
 
         final JsonObject actual = underTest.remove(jsonPointer);
 
@@ -664,7 +651,7 @@ public final class ImmutableJsonObjectTest {
          *    }
          * }
          */
-        attributeJsonObject = ImmutableJsonObject.of(toMap("someKey", JsonObject.empty()));
+        attributeJsonObject = ImmutableJsonObject.of(toMap("someKey", JsonFactory.newObject()));
 
         final JsonObject expected = ImmutableJsonObject.of(toMap("someObjectAttribute", attributeJsonObject));
 
@@ -696,9 +683,9 @@ public final class ImmutableJsonObjectTest {
         JsonObject nestedJsonObject = ImmutableJsonObject.of(toMap("someNestedKey", KNOWN_INT_42));
         JsonObject attributeJsonObject = ImmutableJsonObject.of(toMap("someKey", nestedJsonObject));
         final JsonObject underTest = ImmutableJsonObject.of(toMap("someObjectAttribute", attributeJsonObject));
-        final JsonPointer jsonPointer = JsonPointer.of("someObjectAttribute/someKey/someNestedKey");
+        final JsonPointer jsonPointer = newPointer("someObjectAttribute/someKey/someNestedKey");
 
-        final JsonValue valueToSet = JsonValue.of("monday");
+        final JsonValue valueToSet = JsonFactory.newValue("monday");
         final JsonObject actual = underTest.setValue(jsonPointer, valueToSet);
 
         /*
@@ -771,7 +758,7 @@ public final class ImmutableJsonObjectTest {
          * }
          */
 
-        JsonObject underTest = JsonObject.of("{\"thingId\":\"998bed03-2350-473a-8c42-b9c5558cf8af\","
+        final JsonValue jsonValue = JsonFactory.readFrom("{\"thingId\":\"998bed03-2350-473a-8c42-b9c5558cf8af\","
                 + "\"attributes\":{\"manufacturer\":\"ACME\",\"make\":\"Fancy Fab Car\","
                 + "\"model\":\"Environmental FourWheeler 4711\",\"VIN\":\"0815666337\"},"
                 + "\"features\":{\"Vehicle\":{\"featureId\":\"Vehicle\",\"functionblock\":null,"
@@ -780,15 +767,16 @@ public final class ImmutableJsonObjectTest {
                 + "\"EnvironmentScanner\":{\"featureId\":\"EnvironmentScanner\",\"functionblock\":null,"
                 + "\"properties\":{\"temperature\":20.8,\"humidity\":73,\"barometricPressure\":970.7,"
                 + "\"location\":{\"longitude\":47.682170,\"latitude\":9.386372},\"altitude\":399}}}}");
-        underTest = underTest.setValue(JsonPointer.of("/foo/bar/baz"), JsonObject.of("{\"alice\":\"bob\"}"));
+        JsonObject underTest = jsonValue.asObject();
+        underTest = underTest.setValue(newPointer("/foo/bar/baz"), JsonFactory.newObject("{\"alice\":\"bob\"}"));
 
-        final JsonObjectBuilder bazObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder bazObjectBuilder = JsonFactory.newObjectBuilder();
         bazObjectBuilder.set("alice", "bob");
 
-        final JsonObjectBuilder barObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder barObjectBuilder = JsonFactory.newObjectBuilder();
         barObjectBuilder.set("baz", bazObjectBuilder.build());
 
-        final JsonObjectBuilder fooObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder fooObjectBuilder = JsonFactory.newObjectBuilder();
         fooObjectBuilder.set("bar", barObjectBuilder.build());
         final JsonObject expectedFoo = fooObjectBuilder.build();
 
@@ -813,9 +801,9 @@ public final class ImmutableJsonObjectTest {
         final JsonObject nestedJsonObject = ImmutableJsonObject.of(toMap("someNestedKey", KNOWN_INT_42));
         final JsonObject attributeJsonObject = ImmutableJsonObject.of(toMap("someKey", nestedJsonObject));
         final JsonObject underTest = ImmutableJsonObject.of(toMap("someObjectAttribute", attributeJsonObject));
-        final JsonPointer jsonPointer = JsonPointer.of("someObjectAttribute/isGroovy");
+        final JsonPointer jsonPointer = newPointer("someObjectAttribute/isGroovy");
 
-        final JsonValue valueToSet = JsonValue.of(false);
+        final JsonValue valueToSet = JsonFactory.newValue(false);
         final JsonObject actual = underTest.setValue(jsonPointer, valueToSet);
 
         /*
@@ -831,11 +819,11 @@ public final class ImmutableJsonObjectTest {
          * }
          */
 
-        final JsonObjectBuilder attributeJsonObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder attributeJsonObjectBuilder = JsonFactory.newObjectBuilder();
         attributeJsonObjectBuilder.set("someKey", nestedJsonObject);
         attributeJsonObjectBuilder.set("isGroovy", valueToSet);
 
-        final JsonObjectBuilder rootJsonObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder rootJsonObjectBuilder = JsonFactory.newObjectBuilder();
         rootJsonObjectBuilder.set("someObjectAttribute", attributeJsonObjectBuilder.build());
 
         final JsonObject expected = rootJsonObjectBuilder.build();
@@ -846,8 +834,8 @@ public final class ImmutableJsonObjectTest {
     @Test
     public void setValueThroughPointerOnEmptyJsonObject() {
         final JsonObject underTest = ImmutableJsonObject.empty();
-        final JsonPointer jsonPointer = JsonPointer.of("someObjectAttribute/someKey/someNestedKey");
-        final JsonValue valueToSet = JsonValue.of("monday");
+        final JsonPointer jsonPointer = newPointer("someObjectAttribute/someKey/someNestedKey");
+        final JsonValue valueToSet = JsonFactory.newValue("monday");
         final JsonObject actual = underTest.setValue(jsonPointer, valueToSet);
 
         /*
@@ -861,13 +849,13 @@ public final class ImmutableJsonObjectTest {
          *    }
          * }
          */
-        final JsonObjectBuilder nestedJsonObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder nestedJsonObjectBuilder = JsonFactory.newObjectBuilder();
         nestedJsonObjectBuilder.set("someNestedKey", valueToSet);
 
-        final JsonObjectBuilder attributeJsonObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder attributeJsonObjectBuilder = JsonFactory.newObjectBuilder();
         attributeJsonObjectBuilder.set("someKey", nestedJsonObjectBuilder.build());
 
-        final JsonObjectBuilder rootJsonObjectBuilder = JsonObject.newBuilder();
+        final JsonObjectBuilder rootJsonObjectBuilder = JsonFactory.newObjectBuilder();
         rootJsonObjectBuilder.set("someObjectAttribute", attributeJsonObjectBuilder.build());
 
         final JsonObject expected = rootJsonObjectBuilder.build();
@@ -877,17 +865,16 @@ public final class ImmutableJsonObjectTest {
 
     @Test
     public void setValueThroughPointerOnNonEmptyJsonObject() {
-        final ImmutableJsonObject underTest = ImmutableJsonObject.of(toMap("thingId", JsonValue.of("the_thing")));
+        final JsonValue jsonValue = JsonFactory.readFrom("{\"thingId\":\"the_thing\"}");
+        final JsonObject underTest = jsonValue.asObject();
 
         final JsonValue additionalJsonValue = JsonFactory.readFrom("{\"foo\":\"bar\"}");
-        final JsonPointer pointer = JsonPointer.of("attributes/the_attribute");
+        final JsonPointer pointer = newPointer("attributes/the_attribute");
 
         final JsonObject actual = underTest.setValue(pointer, additionalJsonValue);
-        final Map<String, JsonField> jsonFieldMap = toMap("thingId", JsonValue.of("the_thing"));
-        jsonFieldMap.put("attributes", toField("attributes", JsonObject.newBuilder()
-                .set("the_attribute", JsonObject.of("{\"foo\":\"bar\"}"))
-                .build()));
-        final JsonObject expected = ImmutableJsonObject.of(jsonFieldMap);
+        final JsonObject expected = JsonFactory
+                .readFrom("{\"thingId\":\"the_thing\"," + "\"attributes\":{\"the_attribute\":{\"foo\":\"bar\"}}}")
+                .asObject();
 
         assertThat(actual).isEqualTo(expected);
     }
@@ -896,9 +883,9 @@ public final class ImmutableJsonObjectTest {
     public void iteratorWorksAsExpected() {
         final JsonObject jsonObject = ImmutableJsonObject.of(KNOWN_FIELDS);
         final List<JsonField> expectedJsonFields = new ArrayList<>();
-        expectedJsonFields.add(toField(KNOWN_KEY_FOO, KNOWN_VALUE_FOO));
-        expectedJsonFields.add(toField(KNOWN_KEY_BAR, KNOWN_VALUE_BAR));
-        expectedJsonFields.add(toField(KNOWN_KEY_BAZ, KNOWN_VALUE_BAZ));
+        expectedJsonFields.add(JsonFactory.newField(KNOWN_KEY_FOO, KNOWN_VALUE_FOO));
+        expectedJsonFields.add(JsonFactory.newField(KNOWN_KEY_BAR, KNOWN_VALUE_BAR));
+        expectedJsonFields.add(JsonFactory.newField(KNOWN_KEY_BAZ, KNOWN_VALUE_BAZ));
 
         final Iterator<JsonField> underTest = jsonObject.iterator();
         int index = 0;
@@ -936,7 +923,7 @@ public final class ImmutableJsonObjectTest {
 
         assertThat(underTest.contains(emptyPointer)).isFalse();
 
-        final JsonKey key = JsonKey.of("/");
+        final JsonKey key = JsonFactory.newKey("/");
         underTest = ImmutableJsonObject.of(toMap(key, KNOWN_VALUE_BAR));
 
         assertThat(underTest.contains(emptyPointer)).isFalse();
@@ -961,17 +948,17 @@ public final class ImmutableJsonObjectTest {
          */
 
         final Map<String, JsonField> barValues = toMap(KNOWN_KEY_BAZ, KNOWN_INT_23);
-        barValues.put("oogle", toField("oogle", JsonValue.of("boogle")));
+        barValues.put("oogle", JsonFactory.newField(JsonFactory.newKey("oogle"), JsonFactory.newValue("boogle")));
         final ImmutableJsonObject barJsonObject = ImmutableJsonObject.of(barValues);
 
         final Map<String, JsonField> fooValues = toMap(KNOWN_KEY_BAR, barJsonObject);
         final int intValue10 = 10;
-        fooValues.put("yo", toField("yo", JsonValue.of(intValue10)));
+        fooValues.put("yo", JsonFactory.newField(JsonFactory.newKey("yo"), JsonFactory.newValue(intValue10)));
         final JsonObject fooJsonObject = ImmutableJsonObject.of(fooValues);
 
-        final Map<String, JsonField> values = toMap("thingId", JsonValue.of("0x1337"));
-        values.put(KNOWN_KEY_FOO.toString(), toField(KNOWN_KEY_FOO, fooJsonObject));
-        values.put("isOn", toField("isOn", JsonValue.of(false)));
+        final Map<String, JsonField> values = toMap("thingId", JsonFactory.newValue("0x1337"));
+        values.put(KNOWN_KEY_FOO.toString(), JsonFactory.newField(KNOWN_KEY_FOO, fooJsonObject));
+        values.put("isOn", JsonFactory.newField(JsonFactory.newKey("isOn"), JsonFactory.newValue(false)));
 
         final JsonObject underTest = ImmutableJsonObject.of(values);
 
@@ -988,7 +975,7 @@ public final class ImmutableJsonObjectTest {
 
     @Test
     public void tryToGetJsonObjectWithEmptyJsonPointer() {
-        final JsonObject underTest = ImmutableJsonObject.of(toMap(KNOWN_KEY_FOO, JsonValue.of(KNOWN_INT_42)));
+        final JsonObject underTest = ImmutableJsonObject.of(toMap(KNOWN_KEY_FOO, JsonFactory.newValue(KNOWN_INT_42)));
 
         final JsonObject resultForEmptyPointer = underTest.get(JsonFactory.emptyPointer());
 
@@ -997,22 +984,22 @@ public final class ImmutableJsonObjectTest {
 
     @Test
     public void getWithJsonPointerReturnsExpected() {
-        final ImmutableJsonObject someAttr = ImmutableJsonObject.of(toMap("subsel", JsonValue.of
+        final ImmutableJsonObject someAttr = ImmutableJsonObject.of(toMap("subsel", JsonFactory.newValue
                 (KNOWN_INT_42)));
 
-        final JsonObject expected = JsonObject.newBuilder()
-                .set("attributes", JsonObject.newBuilder()
+        final JsonObject expected = JsonFactory.newObjectBuilder()
+                .set("attributes", JsonFactory.newObjectBuilder()
                         .set("someAttr", someAttr)
                         .build())
                 .build();
 
-        final JsonObject underTest = ImmutableJsonObject.of(toMap("thingId", JsonValue.of("myThing")))
-                .setValue("attributes", JsonObject.newBuilder()
+        final JsonObject underTest = ImmutableJsonObject.of(toMap("thingId", JsonFactory.newValue("myThing")))
+                .setValue("attributes", JsonFactory.newObjectBuilder()
                         .set("someAttr", someAttr)
                         .set("anotherAttr", KNOWN_VALUE_BAR)
                         .build());
 
-        final JsonPointer jsonPointer = JsonPointer.of("attributes/someAttr/subsel");
+        final JsonPointer jsonPointer = newPointer("attributes/someAttr/subsel");
         final JsonObject actual = underTest.get(jsonPointer);
 
         assertThat(actual).isEqualTo(expected);
@@ -1020,7 +1007,7 @@ public final class ImmutableJsonObjectTest {
 
     @Test
     public void getEmptyJsonObjectIfJsonPointerPointsAtNonExistingValue() {
-        final JsonPointer jsonPointer = JsonPointer.of("/nested/bla/blub");
+        final JsonPointer jsonPointer = JsonFactory.newPointer("/nested/bla/blub");
         final JsonObject expected = ImmutableJsonObject.empty();
 
         final JsonObject underTest = ImmutableJsonObject.of(KNOWN_FIELDS)
@@ -1064,9 +1051,9 @@ public final class ImmutableJsonObjectTest {
         final JsonObject nestedJsonObject = ImmutableJsonObject.of(toMap("someNestedKey", KNOWN_INT_42));
         final JsonObject attributeJsonObject = ImmutableJsonObject.of(toMap("someKey", nestedJsonObject));
         final JsonObject underTest = ImmutableJsonObject.of(toMap("someObjectAttribute", attributeJsonObject));
-        final JsonPointer jsonPointer = JsonPointer.of("someObjectAttribute/someKey/someNestedKey");
+        final JsonPointer jsonPointer = newPointer("someObjectAttribute/someKey/someNestedKey");
 
-        final JsonValue expected = JsonValue.of(KNOWN_INT_42);
+        final JsonValue expected = JsonFactory.newValue(KNOWN_INT_42);
         final Optional<JsonValue> actual = underTest.getValue(jsonPointer);
 
         assertThat(actual).contains(expected);
@@ -1088,11 +1075,11 @@ public final class ImmutableJsonObjectTest {
 
     @Test
     public void getFieldWithSlashJsonKeyReturnsExpected() {
-        final JsonKey jsonKey = JsonKey.of("/");
+        final JsonKey jsonKey = JsonFactory.newKey("/");
         final JsonValue jsonValue = KNOWN_VALUE_FOO;
         final ImmutableJsonObject underTest = ImmutableJsonObject.of(toMap(jsonKey, jsonValue));
 
-        assertThat(underTest.getField(jsonKey)).contains(toField(jsonKey, jsonValue));
+        assertThat(underTest.getField(jsonKey)).contains(JsonFactory.newField(jsonKey, jsonValue));
     }
 
     @Test
@@ -1102,7 +1089,7 @@ public final class ImmutableJsonObjectTest {
         final ImmutableJsonObject barJsonObject = ImmutableJsonObject.of(toMap(jsonKey, jsonValue));
         final ImmutableJsonObject underTest = ImmutableJsonObject.of(toMap(KNOWN_KEY_FOO, barJsonObject));
 
-        assertThat(underTest.getField("/foo/bar")).contains(toField(jsonKey, jsonValue));
+        assertThat(underTest.getField("/foo/bar")).contains(JsonFactory.newField(jsonKey, jsonValue));
     }
 
     @Test(expected = NullPointerException.class)
@@ -1138,22 +1125,22 @@ public final class ImmutableJsonObjectTest {
          * }
          */
         JsonObject barJsonObject =
-                JsonObject.newBuilder().set("baz", KNOWN_INT_23).set("oogle", "boogle").build();
+                JsonFactory.newObjectBuilder().set("baz", KNOWN_INT_23).set("oogle", "boogle").build();
         final int intValue10 = 10;
         JsonObject fooJsonObject =
-                JsonObject.newBuilder().set("bar", barJsonObject).set("yo", intValue10).build();
+                JsonFactory.newObjectBuilder().set("bar", barJsonObject).set("yo", intValue10).build();
         final JsonObject underTest =
-                JsonObject.newBuilder()
+                JsonFactory.newObjectBuilder()
                         .set("thingId", "0x1337")
                         .set("foo", fooJsonObject)
                         .set("isOn", false)
                         .build();
 
-        final JsonPointer jsonPointer1 = JsonPointer.of("foo/bar/baz");
-        final JsonPointer jsonPointer2 = JsonPointer.of("foo/yo");
-        final JsonPointer jsonPointer3 = JsonPointer.of("thingId");
+        final JsonPointer jsonPointer1 = newPointer("foo/bar/baz");
+        final JsonPointer jsonPointer2 = newPointer("foo/yo");
+        final JsonPointer jsonPointer3 = newPointer("thingId");
         final JsonFieldSelector jsonFieldSelector =
-                JsonFieldSelector.newInstance(jsonPointer1, jsonPointer2, jsonPointer3);
+                JsonFactory.newFieldSelector(jsonPointer1, jsonPointer2, jsonPointer3);
 
         final JsonObject actual = underTest.get(jsonFieldSelector);
 
@@ -1171,9 +1158,9 @@ public final class ImmutableJsonObjectTest {
          * }
          */
         barJsonObject = ImmutableJsonObject.of(toMap("baz", KNOWN_INT_23));
-        fooJsonObject = JsonObject.newBuilder().set("bar", barJsonObject).set("yo", intValue10).build();
+        fooJsonObject = JsonFactory.newObjectBuilder().set("bar", barJsonObject).set("yo", intValue10).build();
         final JsonObject expected =
-                JsonObject.newBuilder().set("foo", fooJsonObject).set("thingId", "0x1337").build();
+                JsonFactory.newObjectBuilder().set("foo", fooJsonObject).set("thingId", "0x1337").build();
 
         assertThat(actual).isEqualTo(expected);
     }
@@ -1213,7 +1200,7 @@ public final class ImmutableJsonObjectTest {
         stringBuilder.append("}}");
         final String jsonString = stringBuilder.toString();
 
-        final JsonObject jsonObject = JsonObject.of(jsonString);
+        final JsonObject jsonObject = JsonFactory.newObject(jsonString);
         final Optional<JsonValue> owner = jsonObject.getValue("owner");
 
         assertThat(owner).isEmpty();
@@ -1221,7 +1208,7 @@ public final class ImmutableJsonObjectTest {
 
     @Test
     public void setFieldAppendsFieldIfNoPreviousFieldWithSameKeyExists() {
-        final JsonField newField = toField("myKey", JsonValue.of("myValue"));
+        final JsonField newField = JsonFactory.newField(JsonFactory.newKey("myKey"), JsonFactory.newValue("myValue"));
         JsonObject underTest = ImmutableJsonObject.of(KNOWN_FIELDS);
         underTest = underTest.set(newField);
 
@@ -1231,7 +1218,7 @@ public final class ImmutableJsonObjectTest {
 
     @Test
     public void setFieldReplacesExistingFieldWithSameKey() {
-        final JsonField changedField = toField(KNOWN_KEY_BAR, JsonValue.of("myValue"));
+        final JsonField changedField = JsonFactory.newField(KNOWN_KEY_BAR, JsonFactory.newValue("myValue"));
         JsonObject underTest = ImmutableJsonObject.of(KNOWN_FIELDS);
         underTest = underTest.set(changedField);
 
@@ -1241,9 +1228,9 @@ public final class ImmutableJsonObjectTest {
 
     @Test
     public void setValueViaFieldDefinitionOnEmptyObject() {
-        final JsonPointer pointer = JsonPointer.of("foo/bar/baz");
+        final JsonPointer pointer = JsonFactory.newPointer("foo/bar/baz");
         final JsonFieldDefinition<Integer> fieldDefinition = JsonFactory.newIntFieldDefinition(pointer);
-        final JsonValue value = JsonValue.of(KNOWN_INT_23);
+        final JsonValue value = JsonFactory.newValue(KNOWN_INT_23);
 
         final ImmutableJsonObject underTest = ImmutableJsonObject.empty();
         final JsonObject withValue = underTest.set(fieldDefinition, value.asInt());
@@ -1254,21 +1241,22 @@ public final class ImmutableJsonObjectTest {
     @Test
     public void setValueViaFieldDefinitionOnNonEmptyObject() {
         // ARRANGE
-        final JsonPointer pointer = JsonPointer.of("foo/bar/baz");
+        final JsonPointer pointer = JsonFactory.newPointer("foo/bar/baz");
         final JsonFieldDefinition<Integer> fieldDefinition = JsonFactory.newIntFieldDefinition(pointer);
-        final JsonValue value = JsonValue.of(KNOWN_INT_42);
+        final JsonValue value = JsonFactory.newValue(KNOWN_INT_42);
 
         final JsonObject bar = ImmutableJsonObject.empty()
                 .setValue(KNOWN_KEY_BAZ, ImmutableJsonObject.empty())
                 .setValue("oogle", KNOWN_INT_23);
         final JsonObject foo = ImmutableJsonObject.empty().setValue(KNOWN_KEY_BAR, bar);
 
-        final Map<String, JsonField> fieldsFoo = toMap(KNOWN_KEY_FOO, foo);
+        final Map<String, JsonField> fieldsFoo = new LinkedHashMap<>();
+        fieldsFoo.put(KNOWN_KEY_FOO.toString(), JsonFactory.newField(KNOWN_KEY_FOO, foo));
 
         final JsonObject expectedJsonObject = ImmutableJsonObject.empty()
                 .setValue(KNOWN_KEY_FOO, ImmutableJsonObject.empty()
                         .setValue(KNOWN_KEY_BAR, ImmutableJsonObject.empty()
-                                .set(JsonField.newInstance(KNOWN_KEY_BAZ, value, fieldDefinition))
+                                .set(JsonFactory.newField(KNOWN_KEY_BAZ, value, fieldDefinition))
                                 .setValue("oogle", KNOWN_INT_23)));
 
         // ACT
@@ -1281,9 +1269,8 @@ public final class ImmutableJsonObjectTest {
 
     @Test
     public void shouldHandleOverlappingFieldSelectors() {
-        final Map<String, JsonField> jsonFieldMap = toMap("x", JsonObject.of("{\"y\":1,\"z\":2}"));
-        jsonFieldMap.put("w", toField("w", JsonValue.of(3)));
-        final ImmutableJsonObject underTest = ImmutableJsonObject.of(jsonFieldMap);
+        final String jsonString = "{\"x\":{\"y\":1,\"z\":2},\"w\":3}";
+        final JsonObject underTest = JsonFactory.newObject(jsonString);
 
         // a field selector is overlapping if one pointer is a prefix of another.
         final JsonFieldSelector overlappingSelector = JsonFieldSelector.newInstance("x/y", "x/z", "x");
@@ -1295,7 +1282,7 @@ public final class ImmutableJsonObjectTest {
     @Test
     public void emptyAndNonexistentPointersHaveNoEffectInFieldSelector() {
         final String jsonString = "{\"x\":{\"y\":1,\"z\":2},\"w\":3}";
-        final JsonObject underTest = JsonObject.of(jsonString);
+        final JsonObject underTest = JsonFactory.newObject(jsonString);
         final JsonFieldSelector overlappingSelectorWithRoot =
                 JsonFieldSelector.newInstance("w", "a/b/c", "/");
         final JsonObject actual = underTest.get(overlappingSelectorWithRoot);
@@ -1305,7 +1292,7 @@ public final class ImmutableJsonObjectTest {
     @Test
     public void partiallyIntersectingPointersHaveNoEffectInFieldSelector() {
         final String jsonString = "{\"x\":{\"y\":1,\"z\":2},\"w\":3}";
-        final JsonObject underTest = JsonObject.of(jsonString);
+        final JsonObject underTest = JsonFactory.newObject(jsonString);
 
         // a pointer intersects partially if the json object contains a prefix of it but does not contain itself.
         final JsonFieldSelector partiallyIntersecting =
@@ -1317,28 +1304,23 @@ public final class ImmutableJsonObjectTest {
 
     @Test
     public void jsonObjectsNestedInArraysShouldCompareWithoutFieldDefinitions() {
-        final JsonObject objectWithoutDefinition =
-                ImmutableJsonObject.of(toMap("x", JsonArray.of(JsonObject.of("{\"y\":5}"))));
-        final JsonObject objectWithDefinition = JsonObject.newBuilder()
-                .set(JsonFactory.newJsonArrayFieldDefinition("x"), JsonArray.newBuilder()
-                        .add(JsonObject.newBuilder()
-                                .set(JsonFactory.newIntFieldDefinition("y"), 5)
+        final JsonObject objectWithoutDefinition = JsonFactory.newObject("{\"x\":[{\"y\":5}]}");
+        final JsonObject objectWithDefinition = JsonFactory.newObjectBuilder()
+                .set(JsonFieldDefinition.ofJsonArray("x"), JsonFactory.newArrayBuilder()
+                        .add(JsonFactory.newObjectBuilder()
+                                .set(JsonFieldDefinition.ofInt("y"), 5)
                                 .build())
                         .build())
                 .build();
 
         assertThat(objectWithoutDefinition).isEqualToIgnoringFieldDefinitions(objectWithDefinition);
-        Assertions.assertThat(objectWithoutDefinition).isEqualTo(objectWithDefinition);
+        assertThat(objectWithoutDefinition).isNotEqualTo(objectWithDefinition);
     }
 
     private static Map<String, JsonField> toMap(final CharSequence key, final JsonValue value) {
-        final Map<String, JsonField> result = new LinkedHashMap<>();
-        result.put(key.toString(), toField(key, value));
+        final Map<String, JsonField> result = new HashMap<>();
+        result.put(key.toString(), JsonFactory.newField(JsonFactory.newKey(key), value));
         return result;
-    }
-
-    private static JsonField toField(final CharSequence key, final JsonValue value) {
-        return JsonField.newInstance(JsonKey.of(key), value);
     }
 
 }

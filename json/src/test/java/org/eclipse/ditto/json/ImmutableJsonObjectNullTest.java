@@ -10,38 +10,43 @@
  */
 package org.eclipse.ditto.json;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mutabilitydetector.unittesting.MutabilityAssert.assertInstancesOf;
 import static org.mutabilitydetector.unittesting.MutabilityMatchers.areImmutable;
 
+import java.lang.ref.SoftReference;
+
+import org.eclipse.ditto.json.assertions.DittoJsonAssertions;
 import org.junit.Test;
+
+import nl.jqno.equalsverifier.EqualsVerifier;
 
 /**
  * Unit test for {@link ImmutableJsonObjectNull}.
  */
 public final class ImmutableJsonObjectNullTest {
 
+
     @Test
     public void assertImmutability() {
         assertInstancesOf(ImmutableJsonObjectNull.class, areImmutable());
     }
 
+
     @Test
     public void testHashCodeAndEquals() {
-        final ImmutableJsonObjectNull green = ImmutableJsonObjectNull.getInstance();
-        final ImmutableJsonObjectNull blue = ImmutableJsonObjectNull.getInstance();
+        final SoftReference<String> red = new SoftReference<>("red");
+        final SoftReference<String> black = new SoftReference<>("black");
 
-        assertThat(green).isEqualTo(green);
-        assertThat(green).isEqualTo(blue);
+        EqualsVerifier.forClass(ImmutableJsonObjectNull.class) //
+                .withIgnoredFields("stringRepresentation")
+                .withPrefabValues(SoftReference.class, red, black) //
+                .withRedefinedSuperclass() //
+                .verify();
 
-        assertThat(blue).isEqualTo(ImmutableJsonArrayNull.getInstance());
-    }
+        final ImmutableJsonObjectNull green = ImmutableJsonObjectNull.newInstance();
+        final ImmutableJsonObjectNull blue = ImmutableJsonObjectNull.newInstance();
 
-    @Test
-    public void toStringReturnsExpected() {
-        final ImmutableJsonObjectNull underTest = ImmutableJsonObjectNull.getInstance();
-
-        assertThat(underTest.toString()).isEqualTo("null");
+        DittoJsonAssertions.assertThat(green).isEqualTo(blue);
     }
 
 }

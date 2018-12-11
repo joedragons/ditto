@@ -15,33 +15,30 @@ import java.util.Iterator;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
  * An immutable implementation of the NULL literal as JsonArray.
  */
 @Immutable
-final class ImmutableJsonArrayNull extends AbstractJsonValue implements JsonArray, JsonNull {
-
-    @Nullable private static ImmutableJsonArrayNull instance = null;
+final class ImmutableJsonArrayNull extends AbstractImmutableJsonValue implements JsonArray, JsonNull {
 
     private ImmutableJsonArrayNull() {
         super();
     }
 
     /**
-     * Returns an instance of {@code ImmutableJsonArrayNull}.
+     * Creates a new {@code ImmutableJsonArrayNull} object.
      *
-     * @return the instance.
+     * @return a new ImmutableJsonArrayNull object.
      */
-    public static ImmutableJsonArrayNull getInstance() {
-        ImmutableJsonArrayNull result = instance;
-        if (null == result) {
-            result = new ImmutableJsonArrayNull();
-            instance = result;
-        }
-        return result;
+    public static ImmutableJsonArrayNull newInstance() {
+        return new ImmutableJsonArrayNull();
+    }
+
+    @Override
+    protected String createStringRepresentation() {
+        return JsonFactory.nullLiteral().toString();
     }
 
     @Override
@@ -132,11 +129,6 @@ final class ImmutableJsonArrayNull extends AbstractJsonValue implements JsonArra
     @Override
     public int hashCode() {
         return JsonNull.class.hashCode();
-    }
-
-    @Override
-    public String toString() {
-        return JsonFactory.nullLiteral().toString();
     }
 
 }

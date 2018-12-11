@@ -282,7 +282,7 @@ final class NullFeatureProperties implements FeatureProperties {
 
     @Override
     public String toString() {
-        return wrapped.toString();
+        return getClass().getSimpleName() + " [wrapped=" + wrapped + "]";
     }
 
 }
