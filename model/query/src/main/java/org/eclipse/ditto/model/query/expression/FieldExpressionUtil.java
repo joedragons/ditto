@@ -39,7 +39,7 @@ public final class FieldExpressionUtil {
     /**
      * namespace field to be saved in field expressions.
      */
-    public static final String FIELD_NAMESPACE = "_namespace";
+    public static final String FIELD_NAMESPACE = "namespace";
 
     /**
      * Namespace field name.
