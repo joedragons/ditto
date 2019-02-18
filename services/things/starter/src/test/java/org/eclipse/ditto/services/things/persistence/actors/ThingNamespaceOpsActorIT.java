@@ -24,6 +24,7 @@ import org.eclipse.ditto.signals.commands.things.modify.CreateThingResponse;
 import org.eclipse.ditto.signals.commands.things.query.RetrieveThing;
 import org.eclipse.ditto.signals.commands.things.query.RetrieveThingResponse;
 import org.eclipse.ditto.utils.jsr305.annotations.AllValuesAreNonnullByDefault;
+import org.junit.Ignore;
 
 import com.typesafe.config.Config;
 
@@ -35,6 +36,7 @@ import akka.actor.Props;
  * Tests {@link org.eclipse.ditto.services.things.persistence.actors.ThingNamespaceOpsActor} against a local MongoDB.
  */
 @AllValuesAreNonnullByDefault
+@Ignore("TODO: un-ignore")
 public final class ThingNamespaceOpsActorIT extends EventSourceNamespaceOpsActorTestCases {
 
     @Override
