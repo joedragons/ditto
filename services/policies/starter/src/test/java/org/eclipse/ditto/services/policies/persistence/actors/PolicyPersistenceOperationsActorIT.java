@@ -47,12 +47,22 @@ public final class PolicyPersistenceOperationsActorIT extends MongoEventSourceIT
 
     @Test
     public void purgeNamespaceWithoutSuffix() {
-        assertPurgeNamespace();
+        assertPurgeNamespaceWithoutSuffix();
     }
 
     @Test
-    public void purgeEntitiesWithNamespace() {
-        assertPurgeEntitiesWithNamespace();
+    public void purgeNamespaceWithSuffix() {
+        assertPurgeNamespaceWithSuffix();
+    }
+
+    @Test
+    public void purgeEntitiesWithNamespaceWithoutSuffix() {
+        assertPurgeEntitiesWithNamespaceWithoutSuffix();
+    }
+
+    @Test
+    public void purgeEntitiesWithNamespaceWithSuffix() {
+        assertPurgeEntitiesWithNamespaceWithSuffix();
     }
 
     @Override

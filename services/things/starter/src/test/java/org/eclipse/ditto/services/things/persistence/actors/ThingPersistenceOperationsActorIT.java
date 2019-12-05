@@ -14,7 +14,6 @@ package org.eclipse.ditto.services.things.persistence.actors;
 
 import org.eclipse.ditto.model.base.entity.id.EntityId;
 import org.eclipse.ditto.model.base.headers.DittoHeaders;
-import org.eclipse.ditto.model.policies.PolicyId;
 import org.eclipse.ditto.model.things.Thing;
 import org.eclipse.ditto.model.things.ThingId;
 import org.eclipse.ditto.services.utils.persistence.mongo.ops.eventsource.MongoEventSourceITAssertions;
@@ -42,8 +41,13 @@ import akka.actor.Props;
 public final class ThingPersistenceOperationsActorIT extends MongoEventSourceITAssertions<ThingId> {
 
     @Test
-    public void purgeNamespace() {
-        assertPurgeNamespace();
+    public void purgeNamespaceWithoutSuffix() {
+        assertPurgeNamespaceWithoutSuffix();
+    }
+
+    @Test
+    public void purgeNamespaceWithSuffix() {
+        assertPurgeNamespaceWithSuffix();
     }
 
     @Override
@@ -63,10 +67,8 @@ public final class ThingPersistenceOperationsActorIT extends MongoEventSourceITA
 
     @Override
     protected Object getCreateEntityCommand(final ThingId id) {
-        return CreateThing.of(Thing.newBuilder()
-                .setId(id)
-                .setPolicyId(PolicyId.of(id))
-                .build(), null, DittoHeaders.empty());
+        return CreateThing.of(Thing.newBuilder().setId(id).setPolicyId(id.toString()).build(), null,
+                DittoHeaders.empty());
     }
 
     @Override

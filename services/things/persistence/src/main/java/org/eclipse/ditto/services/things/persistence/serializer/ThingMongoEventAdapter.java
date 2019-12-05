@@ -17,8 +17,10 @@ import java.text.MessageFormat;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 
@@ -57,6 +59,7 @@ import org.slf4j.LoggerFactory;
 import akka.actor.ExtendedActorSystem;
 import akka.persistence.journal.EventAdapter;
 import akka.persistence.journal.EventSeq;
+import akka.persistence.journal.Tagged;
 
 /**
  * EventAdapter for {@link Event}s persisted into akka-persistence event-journal. Converts Event to MongoDB
@@ -145,10 +148,18 @@ public final class ThingMongoEventAdapter implements EventAdapter {
                             // remove the policy entries from thing event payload
                             .remove(POLICY_IN_THING_EVENT_PAYLOAD);
             final DittoBsonJson dittoBsonJson = DittoBsonJson.getInstance();
-            return dittoBsonJson.parse(jsonObject);
+            final Object bson = dittoBsonJson.parse(jsonObject);
+            final Set<String> readSubjects = calculateReadSubjects(theEvent);
+            return new Tagged(bson, readSubjects);
         } else {
             throw new IllegalArgumentException("Unable to toJournal a non-'Event' object! Was: " + event.getClass());
         }
+    }
+
+    private Set<String> calculateReadSubjects(final Event<?> theEvent) {
+        return theEvent.getDittoHeaders().getReadSubjects().stream()
+                .map(rs -> "rs:" + rs)
+                .collect(Collectors.toSet());
     }
 
     @Override

@@ -27,6 +27,7 @@ import org.eclipse.ditto.model.base.headers.DittoHeaders;
 import org.eclipse.ditto.services.utils.config.raw.RawConfigSupplier;
 import org.eclipse.ditto.services.utils.persistence.mongo.config.DefaultMongoDbConfig;
 import org.eclipse.ditto.services.utils.persistence.mongo.config.MongoDbConfig;
+import org.eclipse.ditto.services.utils.persistence.mongo.suffixes.NamespaceSuffixCollectionNames;
 import org.eclipse.ditto.services.utils.persistence.operations.AbstractPersistenceOperationsActor;
 import org.eclipse.ditto.services.utils.persistence.operations.PersistenceOperationsConfig;
 import org.eclipse.ditto.services.utils.test.mongo.MongoDbResource;
@@ -106,16 +107,24 @@ public abstract class MongoEventSourceITAssertions<I extends EntityId> {
         }
     }
 
-    protected void assertPurgeNamespace() {
-        purgeNamespace(getEventSourcingConfiguration());
+    protected void assertPurgeNamespaceWithoutSuffix() {
+        purgeNamespace(getConfigWithoutSuffixBuilder());
+    }
+
+    protected void assertPurgeNamespaceWithSuffix() {
+        purgeNamespace(getConfigWithSuffixBuilder());
     }
 
     protected void assertPurgeEntitiesWithoutNamespace() {
-        purgeEntities(getEventSourcingConfiguration(), false);
+        purgeEntities(getConfigWithoutSuffixBuilder(), false);
     }
 
-    protected void assertPurgeEntitiesWithNamespace() {
-        purgeEntities(getEventSourcingConfiguration(), true);
+    protected void assertPurgeEntitiesWithNamespaceWithoutSuffix() {
+        purgeEntities(getConfigWithoutSuffixBuilder(), true);
+    }
+
+    protected void assertPurgeEntitiesWithNamespaceWithSuffix() {
+        purgeEntities(getConfigWithSuffixBuilder(), true);
     }
 
     /**
@@ -186,12 +195,24 @@ public abstract class MongoEventSourceITAssertions<I extends EntityId> {
      */
     protected abstract String getResourceType();
 
+    private Config getConfigWithSuffixBuilder() {
+        // suffix builder is active by default
+        return getEventSourcingConfiguration(ConfigFactory.empty());
+    }
+
+    private Config getConfigWithoutSuffixBuilder() {
+        final Config configOverride =
+                ConfigFactory.parseString("akka.contrib.persistence.mongodb.mongo.suffix-builder.class=\"\"");
+        return getEventSourcingConfiguration(configOverride);
+    }
+
     /**
      * Set up configuration required for event-sourcing to work.
      *
+     * @param configOverride overriding config options.
      * @return config to feed the actor system and its actors.
      */
-    private Config getEventSourcingConfiguration() {
+    private Config getEventSourcingConfiguration(final Config configOverride) {
         // - do not log dead letters (i. e., events for which there is no subscriber)
         // - bind to random available port
         // - do not attempt to join an Akka cluster
@@ -206,7 +227,13 @@ public abstract class MongoEventSourceITAssertions<I extends EntityId> {
                 "akka.contrib.persistence.mongodb.mongo.mongouri=\"" + mongoDbUri + "\"\n";
 
         // load the service config for info about event journal, snapshot store and metadata
-        return ConfigFactory.parseString(testConfig).withFallback(RawConfigSupplier.of(getServiceName()).get());
+        final Config configWithSuffixBuilder = ConfigFactory.parseString(testConfig)
+                .withFallback(RawConfigSupplier.of(getServiceName()).get());
+
+        // set namespace suffix config before persisting any event - NullPointerException otherwise
+        NamespaceSuffixCollectionNames.setSupportedPrefixes(getSupportedPrefixes());
+
+        return configOverride.withFallback(configWithSuffixBuilder);
     }
 
     private void purgeNamespace(final Config config) {

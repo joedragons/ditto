@@ -18,7 +18,6 @@ import java.util.Collection;
 import java.util.List;
 
 import org.bson.Document;
-import org.eclipse.ditto.model.base.entity.id.EntityId;
 import org.eclipse.ditto.services.utils.persistence.mongo.ops.MongoOpsUtil;
 import org.eclipse.ditto.services.utils.persistence.operations.EntityPersistenceOperations;
 
@@ -56,15 +55,15 @@ public final class MongoEntitiesPersistenceOperations implements EntityPersisten
     }
 
     @Override
-    public Source<List<Throwable>, NotUsed> purgeEntity(final EntityId entityId) {
+    public Source<List<Throwable>, NotUsed> purgeEntity(final CharSequence entityId) {
         requireNonNull(entityId);
 
-        final Collection<MongoPersistenceOperationsSelection> selections = selectEntity(entityId);
+        final Collection<MongoPersistenceOperationsSelection> selections = selectEntity(entityId.toString());
 
         return purgeAllSelections(selections);
     }
 
-    private Collection<MongoPersistenceOperationsSelection> selectEntity(final EntityId entityId) {
+    private Collection<MongoPersistenceOperationsSelection> selectEntity(final String entityId) {
         return selectionProvider.selectEntity(entityId);
     }
 
