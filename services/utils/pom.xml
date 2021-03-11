@@ -36,6 +36,7 @@
         <module>config</module>
         <module>ddata</module>
         <module>devops</module>
+        <module>distributed-tracing</module>
         <module>health</module>
         <module>jwt</module>
         <module>namespaces</module>

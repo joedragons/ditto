@@ -37,6 +37,9 @@ import org.eclipse.ditto.services.utils.config.ScopedConfig;
 import org.eclipse.ditto.services.utils.config.raw.RawConfigSupplier;
 import org.eclipse.ditto.services.utils.devops.DevOpsCommandsActor;
 import org.eclipse.ditto.services.utils.devops.LogbackLoggingFacade;
+import org.eclipse.ditto.services.utils.distributed.tracing.DittoTracer;
+import org.eclipse.ditto.services.utils.distributed.tracing.config.DefaultDistributedTracingConfig;
+import org.eclipse.ditto.services.utils.distributed.tracing.config.DistributedTracingConfig;
 import org.eclipse.ditto.services.utils.health.status.StatusSupplierActor;
 import org.eclipse.ditto.services.utils.metrics.config.MetricsConfig;
 import org.eclipse.ditto.services.utils.metrics.prometheus.PrometheusReporterRoute;
@@ -67,6 +70,10 @@ import akka.http.javadsl.model.Uri;
 import akka.http.javadsl.server.Route;
 import akka.management.cluster.bootstrap.ClusterBootstrap;
 import akka.management.javadsl.AkkaManagement;
+import io.opentracing.Span;
+import io.opentracing.Tracer;
+import io.opentracing.tag.Tags;
+import io.opentracing.util.GlobalTracer;
 import kamon.Kamon;
 import kamon.prometheus.PrometheusReporter;
 
@@ -220,6 +227,7 @@ public abstract class DittoService<C extends ServiceSpecificConfig> {
         final ActorSystem actorSystem = createActorSystem(actorSystemConfig);
         initializeActorSystem(actorSystem);
         startKamonPrometheusHttpEndpoint(actorSystem);
+        DittoTracer.registerGlobalTracer(DefaultDistributedTracingConfig.of(rawConfig), serviceName);
         return actorSystem;
     }
 
