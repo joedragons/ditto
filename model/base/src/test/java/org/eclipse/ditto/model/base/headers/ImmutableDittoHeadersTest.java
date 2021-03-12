@@ -118,6 +118,7 @@ public final class ImmutableDittoHeadersTest {
     private static final boolean KNOWN_IS_WEAK_ACK = false;
     private static final boolean KNOWN_POLICY_ENFORCER_INVALIDATED_PREEMPTIVELY = true;
     private static final List<String> KNOWN_JOURNAL_TAGS = Lists.list("tag-a", "tag-b");
+    private static final String KNOWN_TRACE_CONTEXT = "trace-id:span-id:parent-span-id:flags";
 
 
     static {
@@ -650,6 +651,7 @@ public final class ImmutableDittoHeadersTest {
                 String.valueOf(KNOWN_POLICY_ENFORCER_INVALIDATED_PREEMPTIVELY));
         result.put(DittoHeaderDefinition.EVENT_JOURNAL_TAGS.getKey(),
                 charSequencesToJsonArray(KNOWN_JOURNAL_TAGS).toString());
+        result.put(DittoHeaderDefinition.TRACE_CONTEXT.getKey(), KNOWN_TRACE_CONTEXT);
 
         return result;
     }
