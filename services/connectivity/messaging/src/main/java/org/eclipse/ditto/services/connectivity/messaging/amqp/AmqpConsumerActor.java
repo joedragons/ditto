@@ -312,7 +312,7 @@ final class AmqpConsumerActor extends BaseConsumerActor implements MessageListen
 
             // extract context from annotations
             final Tracer tracer = GlobalTracer.get();
-            final SpanContext spanContext = JmsMessageExtractAdapter.extractSpanContext(tracer, message);
+            final SpanContext spanContext = JmsMessageExtractAdapter.extractSpanContext(tracer, message, log);
             // inject context extracted from annotations into headers
             final Map<String, String> map = new HashMap<>();
             tracer.inject(spanContext, Format.Builtin.TEXT_MAP, new TextMapAdapter(map));

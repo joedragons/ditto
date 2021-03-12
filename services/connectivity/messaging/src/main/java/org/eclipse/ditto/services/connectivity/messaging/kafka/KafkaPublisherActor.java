@@ -51,6 +51,12 @@ import akka.actor.Props;
 import akka.actor.Status;
 import akka.japi.pf.ReceiveBuilder;
 import akka.util.ByteString;
+import io.opentracing.Span;
+import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
+import io.opentracing.propagation.Format;
+import io.opentracing.propagation.TextMapAdapter;
+import io.opentracing.util.GlobalTracer;
 
 /**
  * Responsible for publishing {@link org.eclipse.ditto.services.models.connectivity.ExternalMessage}s into an Kafka
@@ -144,6 +150,11 @@ final class KafkaPublisherActor extends BasePublisherActor<KafkaPublishTarget> {
             escalate(error, "Requested to send Kafka message without producer; this is a bug.");
             return CompletableFuture.failedFuture(error);
         } else {
+            final Tracer tracer = GlobalTracer.get();
+            final SpanContext spanContext =
+                    tracer.extract(Format.Builtin.TEXT_MAP, new TextMapAdapter(message.getHeaders()));
+            final Span publishSpan = tracer.buildSpan("publish.kafka").asChildOf(spanContext).start();
+
             final ExternalMessage messageWithConnectionIdHeader = message
                     .withHeader("ditto-connection-id", connection.getId().toString());
             final ProducerRecord<String, String> record = producerRecord(publishTarget, messageWithConnectionIdHeader);
@@ -152,7 +163,10 @@ final class KafkaPublisherActor extends BasePublisherActor<KafkaPublishTarget> {
             final Callback callBack = new ProducerCallBack(signal, autoAckLabel, ackSizeQuota, resultFuture,
                     this::escalateIfNotRetryable, connection);
             producer.send(record, callBack);
-            return resultFuture;
+            return resultFuture.thenApply(r -> {
+                publishSpan.finish();
+                return r;
+            });
         }
     }
 

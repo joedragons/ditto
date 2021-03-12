@@ -18,6 +18,7 @@ import java.util.Map.Entry;
 import java.util.Objects;
 
 import org.apache.qpid.jms.message.JmsMessage;
+import org.eclipse.ditto.services.utils.akka.logging.ThreadSafeDittoLoggingAdapter;
 
 import io.opentracing.SpanContext;
 import io.opentracing.Tracer;
@@ -31,6 +32,7 @@ public class JmsMessageExtractAdapter implements TextMap {
 
     private static final String TRACE_KEY = "uber-trace-id";
     private final JmsMessage jmsMessage;
+    private final ThreadSafeDittoLoggingAdapter log;
 
     /**
      * Creates an adapter for a dittoHeaders.
@@ -38,14 +40,22 @@ public class JmsMessageExtractAdapter implements TextMap {
      * @param jmsMessage The jmsMessage.
      * @throws NullPointerException if any of the parameters are {@code null}.
      */
-    public JmsMessageExtractAdapter(final JmsMessage jmsMessage) {
+    public JmsMessageExtractAdapter(final JmsMessage jmsMessage,
+            final ThreadSafeDittoLoggingAdapter log) {
         this.jmsMessage = Objects.requireNonNull(jmsMessage);
+        this.log = log;
     }
 
     @Override
     public Iterator<Entry<String, String>> iterator() {
 
         final String traceId = (String) jmsMessage.getFacade().getTracingAnnotation(TRACE_KEY);
+
+        log.info("extracted traceId {}", traceId);
+
+        jmsMessage.getFacade().filterTracingAnnotations((k, v) -> {
+            log.info("message annotation {} -> {} [{}]", k, v.getClass().getName(), v);
+        });
 
         if (traceId == null) {
             return Collections.emptyIterator();
@@ -58,11 +68,12 @@ public class JmsMessageExtractAdapter implements TextMap {
         throw new UnsupportedOperationException();
     }
 
-    public static SpanContext extractSpanContext(final Tracer tracer, final JmsMessage jmsMessage) {
+    public static SpanContext extractSpanContext(final Tracer tracer, final JmsMessage jmsMessage,
+            final ThreadSafeDittoLoggingAdapter log) {
 
         Objects.requireNonNull(tracer);
         Objects.requireNonNull(jmsMessage);
 
-        return tracer.extract(Format.Builtin.TEXT_MAP, new JmsMessageExtractAdapter(jmsMessage));
+        return tracer.extract(Format.Builtin.TEXT_MAP, new JmsMessageExtractAdapter(jmsMessage, log));
     }
 }
