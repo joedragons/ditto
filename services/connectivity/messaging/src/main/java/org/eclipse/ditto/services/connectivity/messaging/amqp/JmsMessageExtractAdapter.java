@@ -69,12 +69,7 @@ public class JmsMessageExtractAdapter implements TextMap {
                         log.info("trace context entry {} [{}] -> {} [{}]", k, k.getClass().getName(), v,
                                 v.getClass().getName());
                     });
-                    log.info("get as string");
-                    traceId = (String) map.get(TRACE_KEY);
-                    if (traceId != null) {
-                        log.info("get as symbol");
-                        traceId = (String) map.get(Symbol.getSymbol(TRACE_KEY));
-                    }
+                    traceId = (String) map.get(Symbol.getSymbol(TRACE_KEY));
                 }
             }
         } catch (Exception e) {
