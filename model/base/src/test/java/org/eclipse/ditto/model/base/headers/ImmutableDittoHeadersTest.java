@@ -176,6 +176,7 @@ public final class ImmutableDittoHeadersTest {
                         String.valueOf(KNOWN_POLICY_ENFORCER_INVALIDATED_PREEMPTIVELY))
                 .putHeader(DittoHeaderDefinition.EVENT_JOURNAL_TAGS.getKey(),
                         charSequencesToJsonArray(KNOWN_JOURNAL_TAGS).toString())
+                .putHeader(DittoHeaderDefinition.TRACE_CONTEXT.getKey(), KNOWN_TRACE_CONTEXT)
                 .build();
 
         assertThat(underTest).isEqualTo(expectedHeaderMap);
@@ -400,6 +401,7 @@ public final class ImmutableDittoHeadersTest {
                         KNOWN_POLICY_ENFORCER_INVALIDATED_PREEMPTIVELY)
                 .set(DittoHeaderDefinition.EVENT_JOURNAL_TAGS.getKey(),
                         charSequencesToJsonArray(KNOWN_JOURNAL_TAGS))
+                .set(DittoHeaderDefinition.TRACE_CONTEXT.getKey(), KNOWN_TRACE_CONTEXT)
                 .build();
         final Map<String, String> allKnownHeaders = createMapContainingAllKnownHeaders();
 
