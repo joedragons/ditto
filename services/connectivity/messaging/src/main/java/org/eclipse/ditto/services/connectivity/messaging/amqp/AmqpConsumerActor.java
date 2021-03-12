@@ -74,6 +74,11 @@ import akka.actor.Props;
 import akka.actor.Status;
 import akka.japi.pf.ReceiveBuilder;
 import akka.pattern.Patterns;
+import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
+import io.opentracing.propagation.Format;
+import io.opentracing.propagation.TextMapInjectAdapter;
+import io.opentracing.util.GlobalTracer;
 
 /**
  * Actor which receives message from an AMQP source and forwards them to a {@code MessageMappingProcessorActor}.
@@ -301,7 +306,15 @@ final class AmqpConsumerActor extends BaseConsumerActor implements MessageListen
                         message.getAllPropertyNames(),
                         ackType);
             }
+
             headers = extractHeadersMapFromJmsMessage(message);
+
+            // extract context from annotations
+            final Tracer tracer = GlobalTracer.get();
+            final SpanContext spanContext = JmsMessageExtractAdapter.extractSpanContext(tracer, message);
+            // inject context extracted from annotations into headers
+            tracer.inject(spanContext, Format.Builtin.TEXT_MAP_INJECT, new TextMapInjectAdapter(headers));
+
             correlationId = headers.get(DittoHeaderDefinition.CORRELATION_ID.getKey());
             final ExternalMessageBuilder builder = ExternalMessageFactory.newExternalMessageBuilder(headers);
             final ExternalMessage externalMessage = extractPayloadFromMessage(message, builder, correlationId)
@@ -341,7 +354,6 @@ final class AmqpConsumerActor extends BaseConsumerActor implements MessageListen
             } else {
                 inboundMonitor.exception(e);
             }
-
             log.withCorrelationId(correlationId)
                     .error(e, "Unexpected {}: {}", e.getClass().getName(), e.getMessage());
         }
