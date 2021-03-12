@@ -14,10 +14,12 @@ package org.eclipse.ditto.services.connectivity.messaging.amqp;
 
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 
 import org.apache.qpid.jms.message.JmsMessage;
+import org.apache.qpid.proton.amqp.Symbol;
 import org.eclipse.ditto.services.utils.akka.logging.ThreadSafeDittoLoggingAdapter;
 
 import io.opentracing.SpanContext;
@@ -49,13 +51,37 @@ public class JmsMessageExtractAdapter implements TextMap {
     @Override
     public Iterator<Entry<String, String>> iterator() {
 
-        final String traceId = (String) jmsMessage.getFacade().getTracingAnnotation(TRACE_KEY);
-
-        log.info("extracted traceId {}", traceId);
 
         jmsMessage.getFacade().filterTracingAnnotations((k, v) -> {
             log.info("message annotation {} -> {} [{}]", k, v.getClass().getName(), v);
         });
+
+        String traceId = null;
+        try {
+            final Object traceContext = jmsMessage.getFacade().getTracingAnnotation("x-opt-trace-context");
+
+            log.info("x-opt-trace-context: {}", traceContext);
+            if (traceContext != null) {
+                log.info("x-opt-trace-context type: {}", traceContext.getClass());
+                if (traceContext instanceof Map) {
+                    final Map map = ((Map) traceContext);
+                    map.forEach((k, v) -> {
+                        log.info("trace context entry {} [{}] -> {} [{}]", k, k.getClass().getName(), v,
+                                v.getClass().getName());
+                    });
+                    log.info("get as string");
+                    traceId = (String) map.get(TRACE_KEY);
+                    if (traceId != null) {
+                        log.info("get as symbol");
+                        traceId = (String) map.get(Symbol.getSymbol(TRACE_KEY));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            traceId = null;
+        }
+
+        log.info("extracted traceId {}", traceId);
 
         if (traceId == null) {
             return Collections.emptyIterator();
