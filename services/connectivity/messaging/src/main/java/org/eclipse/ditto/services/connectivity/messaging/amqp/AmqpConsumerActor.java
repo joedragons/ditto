@@ -77,7 +77,7 @@ import akka.pattern.Patterns;
 import io.opentracing.SpanContext;
 import io.opentracing.Tracer;
 import io.opentracing.propagation.Format;
-import io.opentracing.propagation.TextMapInjectAdapter;
+import io.opentracing.propagation.TextMapAdapter;
 import io.opentracing.util.GlobalTracer;
 
 /**
@@ -313,7 +313,8 @@ final class AmqpConsumerActor extends BaseConsumerActor implements MessageListen
             final Tracer tracer = GlobalTracer.get();
             final SpanContext spanContext = JmsMessageExtractAdapter.extractSpanContext(tracer, message);
             // inject context extracted from annotations into headers
-            tracer.inject(spanContext, Format.Builtin.TEXT_MAP_INJECT, new TextMapInjectAdapter(headers));
+            tracer.inject(spanContext, Format.Builtin.TEXT_MAP, new TextMapAdapter(headers));
+
 
             correlationId = headers.get(DittoHeaderDefinition.CORRELATION_ID.getKey());
             final ExternalMessageBuilder builder = ExternalMessageFactory.newExternalMessageBuilder(headers);
