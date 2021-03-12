@@ -21,7 +21,6 @@ import java.nio.ByteBuffer;
 import java.text.MessageFormat;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -311,13 +310,12 @@ final class AmqpConsumerActor extends BaseConsumerActor implements MessageListen
 
             headers = extractHeadersMapFromJmsMessage(message);
 
-            final HashMap<String, String> headersWithTraceContext = new HashMap<>(headers);
             // extract context from annotations
             final Tracer tracer = GlobalTracer.get();
             final SpanContext spanContext = JmsMessageExtractAdapter.extractSpanContext(tracer, message);
             // inject context extracted from annotations into headers
-            tracer.inject(spanContext, Format.Builtin.TEXT_MAP, new TextMapAdapter(headersWithTraceContext));
-            headers = Collections.unmodifiableMap(headersWithTraceContext);
+            final Map<String, String> map = new HashMap<>();
+            tracer.inject(spanContext, Format.Builtin.TEXT_MAP, new TextMapAdapter(map));
 
             correlationId = headers.get(DittoHeaderDefinition.CORRELATION_ID.getKey());
             final ExternalMessageBuilder builder = ExternalMessageFactory.newExternalMessageBuilder(headers);
@@ -327,6 +325,7 @@ final class AmqpConsumerActor extends BaseConsumerActor implements MessageListen
                     .withHeaderMapping(source.getHeaderMapping().orElse(null))
                     .withSourceAddress(sourceAddress)
                     .withPayloadMapping(consumerData.getSource().getPayloadMapping())
+                    .withInternalHeaders(DittoHeaders.of(map))
                     .build();
             inboundMonitor.success(externalMessage);
             final Map<String, String> externalMessageHeaders = externalMessage.getHeaders();
