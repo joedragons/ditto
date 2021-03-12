@@ -315,7 +315,15 @@ public enum DittoHeaderDefinition implements HeaderDefinition {
      * @since 2.0.0
      */
     EVENT_JOURNAL_TAGS("ditto-event-journal-tags", JsonArray.class,
-            false, false, HeaderValueValidators.getJsonArrayValidator());
+            false, false, HeaderValueValidators.getJsonArrayValidator()),
+
+    /**
+     * Trace context header.
+     *
+     * @since 2.0.0
+     */
+    TRACE_CONTEXT("uber-trace-id", String.class,
+            true, true, HeaderValueValidators.getNoOpValidator());
 
     /**
      * Map to speed up lookup of header definition by key.
