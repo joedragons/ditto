@@ -29,6 +29,7 @@ import org.eclipse.ditto.model.base.headers.DittoHeaders;
 import org.eclipse.ditto.model.base.headers.DittoHeadersBuilder;
 import org.eclipse.ditto.model.base.headers.DittoHeadersSizeChecker;
 import org.eclipse.ditto.model.base.headers.WithDittoHeaders;
+import org.eclipse.ditto.model.base.tracing.TracingHelper;
 import org.eclipse.ditto.model.connectivity.ConnectionId;
 import org.eclipse.ditto.model.connectivity.ConnectionType;
 import org.eclipse.ditto.model.connectivity.PayloadMappingDefinition;
@@ -44,11 +45,19 @@ import org.eclipse.ditto.services.connectivity.mapping.MessageMapperRegistry;
 import org.eclipse.ditto.services.connectivity.messaging.mappingoutcome.MappingOutcome;
 import org.eclipse.ditto.services.connectivity.util.ConnectivityMdcEntryKey;
 import org.eclipse.ditto.services.models.connectivity.ExternalMessage;
+import org.eclipse.ditto.services.models.connectivity.ExternalMessageFactory;
 import org.eclipse.ditto.services.models.connectivity.MappedInboundExternalMessage;
 import org.eclipse.ditto.services.utils.akka.logging.ThreadSafeDittoLoggingAdapter;
+import org.eclipse.ditto.services.utils.tracing.TracingTags;
 import org.eclipse.ditto.signals.base.Signal;
 
 import akka.actor.ActorSystem;
+import akka.japi.Pair;
+import io.opentracing.Span;
+import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
+import io.opentracing.tag.Tags;
+import io.opentracing.util.GlobalTracer;
 
 /**
  * Processes incoming {@link ExternalMessage}s to {@link Signal}s.
@@ -128,32 +137,62 @@ public final class InboundMappingProcessor
      */
     @Override
     List<MappingOutcome<MappedInboundExternalMessage>> process(final ExternalMessage message) {
-        final List<MessageMapper> mappers = getMappers(message.getPayloadMapping().orElse(null));
-        logger.withCorrelationId(message.getHeaders().get(DittoHeaderDefinition.CORRELATION_ID.getKey()))
+        final Pair<ExternalMessage, Span> messageSpanPair = traceExternalMessage(message, "map-incomming-messages");
+        final ExternalMessage tracedMessage = messageSpanPair.first();
+
+        final List<MessageMapper> mappers = getMappers(tracedMessage.getPayloadMapping().orElse(null));
+        logger.withCorrelationId(tracedMessage.getHeaders().get(DittoHeaderDefinition.CORRELATION_ID.getKey()))
                 .debug("Mappers resolved for message: {}", mappers);
         final MappingTimer mappingTimer = MappingTimer.inbound(connectionId, connectionType);
-        return mappingTimer.overall(() -> mappers.stream()
-                .flatMap(mapper -> runMapper(mapper, message, mappingTimer))
+        final var mappingOutcomes = mappingTimer.overall(() -> mappers.stream()
+                .flatMap(mapper -> runMapper(mapper, tracedMessage, mappingTimer))
                 .collect(Collectors.toList())
         );
+        messageSpanPair.second().finish();
+        return mappingOutcomes;
+    }
+
+    private Pair<ExternalMessage, Span> traceExternalMessage(ExternalMessage message, String spanOperation) {
+        final Tracer tracer = GlobalTracer.get();
+        final DittoHeaders internalHeaders = message.getInternalHeaders();
+        final SpanContext spanContext = TracingHelper.extractSpanContext(tracer, internalHeaders);
+        final Span span = tracer.buildSpan(spanOperation)
+                .asChildOf(spanContext)
+                .withTag(TracingTags.CONNECTION_ID, connectionId.toString())
+                .withTag(TracingTags.CONNECTION_TYPE, connectionType.getName())
+                .start();
+
+        final ExternalMessage tracedMessage = ExternalMessageFactory.newExternalMessageBuilder(message)
+                .withInternalHeaders(TracingHelper.injectSpanContext(tracer, span.context(), internalHeaders))
+                .build();
+        return Pair.create(tracedMessage, span);
     }
 
     private Stream<MappingOutcome<MappedInboundExternalMessage>> runMapper(final MessageMapper mapper,
-            final ExternalMessage message,
+            final ExternalMessage rawMessage,
             final MappingTimer timer) {
 
-        checkNotNull(message, "message");
+        checkNotNull(rawMessage, "message");
+        final Pair<ExternalMessage, Span> externalMessageSpanPair = traceExternalMessage(
+                rawMessage, "mapper-" + mapper.getId());
+        final ExternalMessage message = externalMessageSpanPair.first();
+        final Span mapperSpan = externalMessageSpanPair.second();
         try {
             if (shouldMapMessageByContentType(message, mapper) && shouldMapMessageByConditions(message, mapper)) {
                 logger.withCorrelationId(message.getInternalHeaders())
                         .debug("Mapping message using mapper {}.", mapper.getId());
-                final List<Adaptable> adaptables = timer.payload(mapper.getId(), () -> mapper.map(message));
+                final List<Pair<Adaptable, Span>> adaptables = timer.payload(mapper.getId(), () -> mapper.map(message))
+                        .stream()
+                        .map(adaptable -> injectNewSpanAsChildOf(adaptable, mapperSpan.context()))
+                        .collect(Collectors.toList());
 
                 if (isNullOrEmpty(adaptables)) {
+                    mapperSpan.finish();
                     return Stream.of(MappingOutcome.dropped(mapper.getId(), message));
                 } else {
                     final List<MappedInboundExternalMessage> mappedMessages = new ArrayList<>(adaptables.size());
-                    for (final Adaptable adaptable : adaptables) {
+                    for (final Pair<Adaptable,Span> tracedAdaptable : adaptables) {
+                        final Adaptable adaptable = tracedAdaptable.first();
                         try {
                             final Signal<?> signal = timer.protocol(() -> protocolAdapter.fromAdaptable(adaptable));
                             dittoHeadersSizeChecker.check(signal.getDittoHeaders());
@@ -166,6 +205,11 @@ public final class InboundMappingProcessor
                                             signalWithMapperHeader);
                             mappedMessages.add(mappedMessage);
                         } catch (final Exception e) {
+                            mapperSpan
+                                    .setTag(Tags.ERROR, true)
+                                    .log(e.getMessage())
+                                    .finish();
+                            adaptables.stream().map(Pair::second).forEach(Span::finish);
                             return Stream.of(MappingOutcome.error(mapper.getId(),
                                     toDittoRuntimeException(e, mapper, adaptable.getDittoHeaders(), message),
                                     adaptable.getTopicPath(),
@@ -173,9 +217,13 @@ public final class InboundMappingProcessor
                             ));
                         }
                     }
-                    return mappedMessages.stream()
-                            .map(mapped -> MappingOutcome.mapped(mapper.getId(), mapped, mapped.getTopicPath(),
-                                    message));
+                    mapperSpan.finish();
+                    final var mappingOutcomeStream = mappedMessages.stream()
+                                    .map(mapped -> MappingOutcome.mapped(mapper.getId(), mapped, mapped.getTopicPath(),
+                                            message));
+
+                    adaptables.stream().map(Pair::second).forEach(Span::finish);
+                    return mappingOutcomeStream;
                 }
             } else {
                 logger.withCorrelationId(message.getInternalHeaders())
@@ -188,6 +236,17 @@ public final class InboundMappingProcessor
             return Stream.of(MappingOutcome.error(mapper.getId(), toDittoRuntimeException(e, mapper,
                     resolveDittoHeadersBestEffort(message), message), null, message));
         }
+    }
+
+    private static Pair<Adaptable, Span> injectNewSpanAsChildOf(Adaptable adaptable, SpanContext spanContext) {
+        final Tracer tracer = GlobalTracer.get();
+        final Span mappedMessageSpan = tracer.buildSpan("mapped-message")
+                .asChildOf(spanContext)
+                .start();
+        final Adaptable tracedAdaptable =
+                adaptable.setDittoHeaders(TracingHelper.injectSpanContext(tracer, mappedMessageSpan.context(),
+                        adaptable.getDittoHeaders()));
+        return Pair.create(tracedAdaptable, mappedMessageSpan);
     }
 
     private DittoHeaders resolveDittoHeadersBestEffort(final ExternalMessage message) {

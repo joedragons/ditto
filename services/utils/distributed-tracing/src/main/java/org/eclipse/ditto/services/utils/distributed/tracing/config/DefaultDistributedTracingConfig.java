@@ -17,7 +17,6 @@
  import static org.eclipse.ditto.services.utils.distributed.tracing.config.DistributedTracingConfig.DistributedTracingConfigValue.SAMPLER_TYPE;
 
  import org.eclipse.ditto.services.utils.config.DefaultScopedConfig;
- import org.eclipse.ditto.services.utils.config.ScopedConfig;
 
  import com.typesafe.config.Config;
 
