@@ -18,8 +18,6 @@ import java.util.Map.Entry;
 import java.util.Objects;
 
 import org.eclipse.ditto.model.base.headers.DittoHeaders;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import io.opentracing.propagation.TextMap;
 
@@ -27,8 +25,6 @@ import io.opentracing.propagation.TextMap;
  * An adapter for extracting properties from an AMQP 1.0 message's message annotations.
  */
 public class DittoHeadersExtractAdapter implements TextMap {
-
-    private static final Logger LOG = LoggerFactory.getLogger(DittoHeadersExtractAdapter.class);
 
     private final DittoHeaders dittoHeaders;
 
