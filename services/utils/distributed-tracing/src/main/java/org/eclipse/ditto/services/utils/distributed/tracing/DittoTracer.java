@@ -34,7 +34,7 @@
              final Configuration.SamplerConfiguration constSampler = new Configuration.SamplerConfiguration()
                      .withType(distributedTracingConfig.getSampler())
                      .withParam(distributedTracingConfig.getSampleParam());
-             Configuration configuration = new Configuration(serviceName)
+             Configuration configuration = new Configuration("ditto-" + serviceName)
                      .withReporter(reporterConfiguration)
                      .withSampler(constSampler);
              return configuration.getTracer();

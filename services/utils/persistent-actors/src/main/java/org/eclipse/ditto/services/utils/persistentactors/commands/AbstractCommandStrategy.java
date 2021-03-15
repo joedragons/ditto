@@ -23,9 +23,16 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 import org.eclipse.ditto.model.base.entity.metadata.Metadata;
+import org.eclipse.ditto.model.base.headers.DittoHeaders;
+import org.eclipse.ditto.model.base.tracing.TracingHelper;
 import org.eclipse.ditto.services.utils.persistentactors.results.Result;
 import org.eclipse.ditto.signals.commands.base.Command;
 import org.eclipse.ditto.signals.events.base.Event;
+
+import io.opentracing.Span;
+import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
+import io.opentracing.util.GlobalTracer;
 
 /**
  * Abstract base implementation of {@code CommandStrategy}.
@@ -63,8 +70,19 @@ public abstract class AbstractCommandStrategy<C extends Command<?>, S, K, E exte
                 context.getLog().withCorrelationId(command)
                         .debug("Applying command <{}>", command);
             }
-            @Nullable final Metadata metadata = calculateRelativeMetadata(entity, command).orElse(null);
-            return doApply(context, entity, nextRevision, command, metadata);
+            final Tracer tracer = GlobalTracer.get();
+            final SpanContext spanContext = TracingHelper.extractSpanContext(tracer, command.getDittoHeaders());
+            final Span span = tracer.buildSpan("apply-" + command.getClass().getSimpleName())
+                    .asChildOf(spanContext)
+                    .start();
+
+            final C tracedCommand = (C) command.setDittoHeaders(
+                    TracingHelper.injectSpanContext(tracer, spanContext, command.getDittoHeaders()));
+
+            @Nullable final Metadata metadata = calculateRelativeMetadata(entity, tracedCommand).orElse(null);
+            final Result<E> result = doApply(context, entity, nextRevision, tracedCommand, metadata);
+            span.finish();
+            return result;
         } else {
             return unhandled(context, entity, nextRevision, command);
         }

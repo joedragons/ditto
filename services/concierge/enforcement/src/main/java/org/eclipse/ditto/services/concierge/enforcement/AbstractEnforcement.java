@@ -37,6 +37,7 @@ import org.eclipse.ditto.signals.commands.base.exceptions.GatewayInternalErrorEx
 
 import akka.actor.ActorRef;
 import akka.pattern.AskTimeoutException;
+import io.opentracing.Span;
 
 /**
  * Contains self-type requirements for aspects of enforcer actor dealing with specific commands.
@@ -87,6 +88,9 @@ public abstract class AbstractEnforcement<C extends Signal<?>> {
             context.getStartedTimer()
                     .map(startedTimer -> startedTimer.tag("outcome", throwable != null ? "fail" : "success"))
                     .ifPresent(StartedTimer::stop);
+            context.getStartedSpan()
+                    .map(startedSpan -> startedSpan.setTag("outcome", throwable != null ? "fail" : "success"))
+                    .ifPresent(Span::finish);
             return Objects.requireNonNullElseGet(result,
                     () -> withMessageToReceiver(reportError("Error thrown during enforcement", throwable), sender()));
         };

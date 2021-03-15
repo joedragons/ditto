@@ -17,7 +17,9 @@ import static org.eclipse.ditto.model.base.common.ConditionChecker.checkNotNull;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Stream;
@@ -58,6 +60,8 @@ import akka.pattern.Patterns;
 import io.opentracing.Span;
 import io.opentracing.SpanContext;
 import io.opentracing.Tracer;
+import io.opentracing.propagation.Format;
+import io.opentracing.propagation.TextMapAdapter;
 import io.opentracing.tag.Tags;
 import io.opentracing.util.GlobalTracer;
 
@@ -119,17 +123,18 @@ public abstract class BaseConsumerActor extends AbstractActorWithTimers {
             final Reject reject) {
 
         final Tracer tracer = GlobalTracer.get();
-        final DittoHeaders internalHeaders = message.getInternalHeaders();
-        final SpanContext traceContext = TracingHelper.extractSpanContext(tracer, internalHeaders);
+        DittoHeaders.newBuilder(message.getHeaders()).build();
+        final SpanContext traceContext = tracer.extract(Format.Builtin.TEXT_MAP, new TextMapAdapter(message.getHeaders()));
         final Span mappingIncomingMessageSpan = tracer.buildSpan("handle-incoming-message")
                 .asChildOf(traceContext)
                 .withTag(TracingTags.CONNECTION_ID, connectionId.toString())
                 .withTag(TracingTags.CONNECTION_TYPE, connectionType.getName())
                 .start();
 
+        final HashMap<String, String> traceHeaders = new HashMap<>();
+        tracer.inject(mappingIncomingMessageSpan.context(), Format.Builtin.TEXT_MAP, new TextMapAdapter(traceHeaders));
         final ExternalMessage tracedMessage = ExternalMessageFactory.newExternalMessageBuilder(message)
-                .withInternalHeaders(TracingHelper.injectSpanContext(tracer, mappingIncomingMessageSpan.context(),
-                        internalHeaders))
+                .withAdditionalHeaders(traceHeaders)
                 .build();
 
         final StartedTimer timer = DittoMetrics.timer(TIMER_ACK_HANDLING)
@@ -212,20 +217,26 @@ public abstract class BaseConsumerActor extends AbstractActorWithTimers {
      * @param message the error.
      */
     protected final void forwardToMappingActor(final DittoRuntimeException message) {
-        final DittoRuntimeException messageWithReplyInformation =
-                message.setDittoHeaders(enrichHeadersWithReplyInformation(message.getDittoHeaders()));
+        final DittoHeaders headersWithReplyInfo = enrichHeadersWithReplyInformation(message.getDittoHeaders());
+
         final Tracer tracer = GlobalTracer.get();
-        final DittoHeaders dittoHeaders = message.getDittoHeaders();
-        final SpanContext traceContext = TracingHelper.extractSpanContext(tracer, dittoHeaders);
-        tracer.buildSpan("handle-incoming-message")
+        final SpanContext traceContext = TracingHelper.extractSpanContext(tracer, headersWithReplyInfo);
+        final Span span = tracer.buildSpan("handle-incoming-message")
                 .asChildOf(traceContext)
                 .withTag(Tags.HTTP_STATUS, message.getHttpStatus().getCode())
                 .withTag(Tags.ERROR, true)
                 .withTag(TracingTags.CONNECTION_ID, connectionId.toString())
                 .withTag(TracingTags.CONNECTION_TYPE, connectionType.getName())
                 .start()
-                .log(message.toString())
-                .finish();
+                .log(message.toString());
+
+        final DittoHeaders headerWithTracingAndReplyInfo = TracingHelper.injectSpanContext(tracer, span.context(),
+                headersWithReplyInfo);
+        span.finish();
+
+        final DittoRuntimeException messageWithReplyInformation =
+                message.setDittoHeaders(headerWithTracingAndReplyInfo);
+
         inboundMappingProcessor.tell(messageWithReplyInformation, ActorRef.noSender());
     }
 

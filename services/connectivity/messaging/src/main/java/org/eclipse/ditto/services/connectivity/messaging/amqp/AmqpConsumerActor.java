@@ -21,6 +21,7 @@ import java.nio.ByteBuffer;
 import java.text.MessageFormat;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -314,18 +315,19 @@ final class AmqpConsumerActor extends BaseConsumerActor implements MessageListen
             final Tracer tracer = GlobalTracer.get();
             final SpanContext spanContext = JmsMessageExtractAdapter.extractSpanContext(tracer, message, log);
             // inject context extracted from annotations into headers
-            final Map<String, String> map = new HashMap<>();
-            tracer.inject(spanContext, Format.Builtin.TEXT_MAP, new TextMapAdapter(map));
+            final HashMap<String, String> headerWithTraceContext = new HashMap<>();
+            headerWithTraceContext.putAll(headers);
+            tracer.inject(spanContext, Format.Builtin.TEXT_MAP, new TextMapAdapter(headerWithTraceContext));
 
             correlationId = headers.get(DittoHeaderDefinition.CORRELATION_ID.getKey());
-            final ExternalMessageBuilder builder = ExternalMessageFactory.newExternalMessageBuilder(headers);
+            final ExternalMessageBuilder builder =
+                    ExternalMessageFactory.newExternalMessageBuilder(Collections.unmodifiableMap(headerWithTraceContext));
             final ExternalMessage externalMessage = extractPayloadFromMessage(message, builder, correlationId)
                     .withAuthorizationContext(source.getAuthorizationContext())
                     .withEnforcement(headerEnforcementFilterFactory.getFilter(headers))
                     .withHeaderMapping(source.getHeaderMapping().orElse(null))
                     .withSourceAddress(sourceAddress)
                     .withPayloadMapping(consumerData.getSource().getPayloadMapping())
-                    .withInternalHeaders(DittoHeaders.of(map))
                     .build();
             inboundMonitor.success(externalMessage);
             final Map<String, String> externalMessageHeaders = externalMessage.getHeaders();

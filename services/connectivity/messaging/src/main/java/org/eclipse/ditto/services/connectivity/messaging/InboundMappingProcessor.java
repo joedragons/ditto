@@ -16,7 +16,9 @@ import static org.eclipse.ditto.model.base.common.ConditionChecker.checkNotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -45,17 +47,21 @@ import org.eclipse.ditto.services.connectivity.mapping.MessageMapperRegistry;
 import org.eclipse.ditto.services.connectivity.messaging.mappingoutcome.MappingOutcome;
 import org.eclipse.ditto.services.connectivity.util.ConnectivityMdcEntryKey;
 import org.eclipse.ditto.services.models.connectivity.ExternalMessage;
+import org.eclipse.ditto.services.models.connectivity.ExternalMessageBuilder;
 import org.eclipse.ditto.services.models.connectivity.ExternalMessageFactory;
 import org.eclipse.ditto.services.models.connectivity.MappedInboundExternalMessage;
 import org.eclipse.ditto.services.utils.akka.logging.ThreadSafeDittoLoggingAdapter;
 import org.eclipse.ditto.services.utils.tracing.TracingTags;
 import org.eclipse.ditto.signals.base.Signal;
+import org.eclipse.ditto.signals.commands.base.Command;
 
 import akka.actor.ActorSystem;
 import akka.japi.Pair;
 import io.opentracing.Span;
 import io.opentracing.SpanContext;
 import io.opentracing.Tracer;
+import io.opentracing.propagation.Format;
+import io.opentracing.propagation.TextMapAdapter;
 import io.opentracing.tag.Tags;
 import io.opentracing.util.GlobalTracer;
 
@@ -137,7 +143,8 @@ public final class InboundMappingProcessor
      */
     @Override
     List<MappingOutcome<MappedInboundExternalMessage>> process(final ExternalMessage message) {
-        final Pair<ExternalMessage, Span> messageSpanPair = traceExternalMessage(message, "map-incomming-messages");
+        final Pair<ExternalMessage, Span> messageSpanPair = traceExternalMessage(message,
+                "map-" + message.getClass().getSimpleName());
         final ExternalMessage tracedMessage = messageSpanPair.first();
 
         final List<MessageMapper> mappers = getMappers(tracedMessage.getPayloadMapping().orElse(null));
@@ -154,16 +161,17 @@ public final class InboundMappingProcessor
 
     private Pair<ExternalMessage, Span> traceExternalMessage(ExternalMessage message, String spanOperation) {
         final Tracer tracer = GlobalTracer.get();
-        final DittoHeaders internalHeaders = message.getInternalHeaders();
-        final SpanContext spanContext = TracingHelper.extractSpanContext(tracer, internalHeaders);
+        final SpanContext spanContext = tracer.extract(Format.Builtin.TEXT_MAP, new TextMapAdapter(message.getHeaders()));
         final Span span = tracer.buildSpan(spanOperation)
                 .asChildOf(spanContext)
                 .withTag(TracingTags.CONNECTION_ID, connectionId.toString())
                 .withTag(TracingTags.CONNECTION_TYPE, connectionType.getName())
                 .start();
 
+        final Map<String, String> traceHeaders = new HashMap<>();
+        tracer.inject(span.context(), Format.Builtin.TEXT_MAP, new TextMapAdapter(traceHeaders));
         final ExternalMessage tracedMessage = ExternalMessageFactory.newExternalMessageBuilder(message)
-                .withInternalHeaders(TracingHelper.injectSpanContext(tracer, span.context(), internalHeaders))
+                .withAdditionalHeaders(traceHeaders)
                 .build();
         return Pair.create(tracedMessage, span);
     }
@@ -181,17 +189,17 @@ public final class InboundMappingProcessor
             if (shouldMapMessageByContentType(message, mapper) && shouldMapMessageByConditions(message, mapper)) {
                 logger.withCorrelationId(message.getInternalHeaders())
                         .debug("Mapping message using mapper {}.", mapper.getId());
-                final List<Pair<Adaptable, Span>> adaptables = timer.payload(mapper.getId(), () -> mapper.map(message))
+                final List<Pair<Adaptable, Span>> tracedAdaptables = timer.payload(mapper.getId(), () -> mapper.map(message))
                         .stream()
-                        .map(adaptable -> injectNewSpanAsChildOf(adaptable, mapperSpan.context()))
+                        .map(adaptable -> injectNewSpanAsChildOf(adaptable, mapperSpan))
                         .collect(Collectors.toList());
 
-                if (isNullOrEmpty(adaptables)) {
+                if (isNullOrEmpty(tracedAdaptables)) {
                     mapperSpan.finish();
                     return Stream.of(MappingOutcome.dropped(mapper.getId(), message));
                 } else {
-                    final List<MappedInboundExternalMessage> mappedMessages = new ArrayList<>(adaptables.size());
-                    for (final Pair<Adaptable,Span> tracedAdaptable : adaptables) {
+                    final List<MappedInboundExternalMessage> mappedMessages = new ArrayList<>(tracedAdaptables.size());
+                    for (final Pair<Adaptable,Span> tracedAdaptable : tracedAdaptables) {
                         final Adaptable adaptable = tracedAdaptable.first();
                         try {
                             final Signal<?> signal = timer.protocol(() -> protocolAdapter.fromAdaptable(adaptable));
@@ -209,7 +217,7 @@ public final class InboundMappingProcessor
                                     .setTag(Tags.ERROR, true)
                                     .log(e.getMessage())
                                     .finish();
-                            adaptables.stream().map(Pair::second).forEach(Span::finish);
+                            tracedAdaptables.stream().map(Pair::second).forEach(Span::finish);
                             return Stream.of(MappingOutcome.error(mapper.getId(),
                                     toDittoRuntimeException(e, mapper, adaptable.getDittoHeaders(), message),
                                     adaptable.getTopicPath(),
@@ -222,7 +230,7 @@ public final class InboundMappingProcessor
                                     .map(mapped -> MappingOutcome.mapped(mapper.getId(), mapped, mapped.getTopicPath(),
                                             message));
 
-                    adaptables.stream().map(Pair::second).forEach(Span::finish);
+                    tracedAdaptables.stream().map(Pair::second).forEach(Span::finish);
                     return mappingOutcomeStream;
                 }
             } else {
@@ -233,16 +241,21 @@ public final class InboundMappingProcessor
                 return Stream.of(MappingOutcome.dropped(mapper.getId(), message));
             }
         } catch (final Exception e) {
+            mapperSpan
+                    .setTag(Tags.ERROR, true)
+                    .log(e.getMessage())
+                    .finish();
             return Stream.of(MappingOutcome.error(mapper.getId(), toDittoRuntimeException(e, mapper,
                     resolveDittoHeadersBestEffort(message), message), null, message));
         }
     }
 
-    private static Pair<Adaptable, Span> injectNewSpanAsChildOf(Adaptable adaptable, SpanContext spanContext) {
+    private static Pair<Adaptable, Span> injectNewSpanAsChildOf(Adaptable adaptable, Span span) {
         final Tracer tracer = GlobalTracer.get();
-        final Span mappedMessageSpan = tracer.buildSpan("mapped-message")
-                .asChildOf(spanContext)
+        final Span mappedMessageSpan = tracer.buildSpan("mapped-" + adaptable.getClass().getSimpleName())
+                .asChildOf(span.context())
                 .start();
+
         final Adaptable tracedAdaptable =
                 adaptable.setDittoHeaders(TracingHelper.injectSpanContext(tracer, mappedMessageSpan.context(),
                         adaptable.getDittoHeaders()));

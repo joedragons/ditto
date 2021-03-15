@@ -16,7 +16,9 @@ import java.time.Duration;
 
 import javax.annotation.Nullable;
 
+import org.eclipse.ditto.model.base.headers.DittoHeaders;
 import org.eclipse.ditto.model.base.headers.WithDittoHeaders;
+import org.eclipse.ditto.model.base.tracing.TracingHelper;
 import org.eclipse.ditto.model.enforcers.Enforcer;
 import org.eclipse.ditto.services.concierge.common.ConciergeConfig;
 import org.eclipse.ditto.services.concierge.common.DittoConciergeConfig;
@@ -40,8 +42,13 @@ import org.eclipse.ditto.signals.commands.policies.PolicyCommand;
 import com.github.benmanes.caffeine.cache.Caffeine;
 
 import akka.actor.ActorRef;
+import akka.japi.Pair;
 import akka.japi.pf.ReceiveBuilder;
 import akka.stream.javadsl.Sink;
+import io.opentracing.Span;
+import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
+import io.opentracing.util.GlobalTracer;
 
 /**
  * Extensible actor to execute enforcement behavior.
@@ -138,7 +145,28 @@ public abstract class AbstractEnforcerActor extends AbstractGraphActor<Contextua
 
     @Override
     protected Contextual<WithDittoHeaders<?>> beforeProcessMessage(final Contextual<WithDittoHeaders<?>> contextual) {
-        return contextual.withTimer(createTimer(contextual.getMessage()));
+        final Tracer tracer = GlobalTracer.get();
+        final DittoHeaders dittoHeaders = contextual.getDittoHeaders();
+        final SpanContext spanContext = TracingHelper.extractSpanContext(tracer, dittoHeaders);
+        final Span enforceSignalSpan = tracer.buildSpan("enforce-" + contextual.getMessage().getClass().getSimpleName())
+                .asChildOf(spanContext)
+                .start();
+
+        dittoHeaders.getChannel().ifPresent(channel ->
+                enforceSignalSpan.setTag("channel", channel)
+        );
+        if (contextual.getMessage() instanceof Signal) {
+            enforceSignalSpan.setTag("resource", ((Signal<?>) contextual.getMessage()).getResourceType());
+        }
+        if (contextual.getMessage() instanceof Command) {
+            enforceSignalSpan.setTag("category", ((Command<?>) contextual.getMessage()).getCategory().name().toLowerCase());
+        }
+        final DittoHeaders tracedDittoHeaders =
+                TracingHelper.injectSpanContext(tracer, enforceSignalSpan.context(), dittoHeaders);
+        final WithDittoHeaders<?> tracedMessage = contextual.setDittoHeaders(tracedDittoHeaders);
+        final Contextual<WithDittoHeaders<?>> tracedContextual = contextual.withMessage(tracedMessage);
+        return tracedContextual.withTracing(createTimer(contextual.getMessage()),
+                enforceSignalSpan);
     }
 
     private StartedTimer createTimer(final WithDittoHeaders<?> withDittoHeaders) {
