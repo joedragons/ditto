@@ -3,7 +3,6 @@
   <img src="https://raw.githubusercontent.com/eclipse/ditto/master/logo/ditto.svg?sanitize=true#gh-light-mode-only" alt="Ditto Logo light" height="250">
 </div>
 
-
 # Eclipse Ditto™
 
 [![Join the chat at https://gitter.im/eclipse/ditto](https://badges.gitter.im/eclipse/ditto.svg)](https://gitter.im/eclipse/ditto?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
